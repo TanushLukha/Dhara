@@ -5,7 +5,8 @@ Acts and cites the sections it relies on. It is built in six measured steps, as 
 step is compared with what people actually use: a large language model answering from memory, and
 the standard RAG recipe from tutorials.
 
-Status: a draft for review; nothing is built yet. Numbers marked "estimate" come from the sources at
+Status: a draft for review; nothing is built yet. Tanush's decisions (free tiers only, 550 hand
+checked questions, the six Acts) are folded in. Numbers marked "estimate" come from the sources at
 the end and the arithmetic in Appendix A; M1 replaces each of them with a measurement on the M2
 MacBook Air. Nothing here is legal advice: Dhara reports what the text of the Acts says.
 
@@ -45,11 +46,11 @@ Roles (ROLE_STRATEGY.md): AI engineer, paired with TinyGPT; SDE backend, paired 
 
 | Milestone | Question | Built | Measured on |
 |---|---|---|---|
-| M1 Baseline | How well do LLMs answer from memory, and how well does the standard RAG recipe do, on a hand checked question set scored one way for every system? | the corpus as sections, the question sets, the scorer, a validated judge, an LLM client with cache and costs, a benchmark of local models | validation questions: accurate rate, hallucination rate, citation F1, abstention, latency, cost |
+| M1 Baseline | How well do LLMs answer from memory, and how well does the standard RAG recipe do, on a hand checked question set scored one way for every system? | the corpus as sections, the question sets, the scorer, a validated judge, an LLM client with cache and quota pacing, a benchmark of local models | validation questions: accurate rate, hallucination rate, citation F1, abstention, latency, cost |
 | M2 Retrieval | Which retrieval puts the right sections in front of the model, and what does each choice add? | section aware chunks, BM25, dense embedders, hybrid fusion, rerankers, direct section lookup | validation questions: recall at k, MRR and nDCG@10 at the section level, latency |
 | M3 Answers | Given the sections found, how often is the answer right and rightly cited, and how much is lost to finding rather than answering? | a grounded answer generator with structured citations, citation checks, the oracle ceiling | validation questions: M1's metrics with oracle, best and standard retrieval |
 | M4 Agent | What does an agent add over M3's best pipeline, and at what cost in calls, tokens and seconds? | a LangGraph agent: routing, planning, lookup, mapping and classification tools, retrieving again, citation verification, abstention | validation questions: M1's metrics, ablations, calls and latency per question |
-| M5 Comparison | On the sealed test set, read once, where does Dhara stand against frontier models answering from memory and the standard recipe, and what do local and API models trade? | one harness for every frozen system and generator | test questions: every metric with intervals, latency p50 and p95, cost per 1,000 questions, memory, licence |
+| M5 Comparison | On the sealed test set, read once, where does Dhara stand against the strongest free models answering from memory and the standard recipe, and what do local and API models trade? | one harness for every frozen system and generator | test questions: every metric with intervals, latency p50 and p95, cost per 1,000 questions at list prices, memory, licence |
 | M6 Ship | Can someone use it, does the service answer as M5 measured, and at what latency under load? | FastAPI service with streaming, PostgreSQL (pgvector, BM25), Docker Compose, a demo page, CI | the test set through the service, load test percentiles, retrieval agreement with M2 |
 
 Each milestone leaves code the next one reuses, ends with "What M<n> found, and what it means for
@@ -111,8 +112,8 @@ and key facts: short, checkable statements the answer must contain ("imprisonmen
 
 * **Accurate** (the headline): an answerable question answered correctly and grounded, or an
   unanswerable one declined (or its false premise corrected). The terms are adapted from Stanford's
-  legal research study: **correct** means every key fact is stated and nothing contradicts the gold answer;
-  **grounded** means each key statement cites a section that supports it.
+  legal research study: **correct** means every key fact is stated and nothing contradicts the gold
+  answer; **grounded** means each key statement cites a section that supports it.
 * **Hallucinated:** an incorrect statement, or a misgrounded one: a cited section that does not exist,
   does not support the statement, or does not apply (the repealed IPC cited for an offence the BNS
   governs).
@@ -125,41 +126,51 @@ and key facts: short, checkable statements the answer must contain ("imprisonmen
 * **Retrieval (M2):** recall at 1, 5, 10 and 20 (every required section found, and any found), MRR
   and nDCG@10, at the section level.
 * **Cost and speed:** tokens and calls per question, seconds per question (p50, p95), USD per 1,000
-  questions, peak memory.
+  questions at list prices (nothing is paid), peak memory.
 
 Every rate comes with a bootstrap 95% interval over questions grouped by their seed section, and
 systems are compared in pairs on the same questions (decision 11).
 
 ## Models, and what runs where
 
-Everything that produces a number runs on the M2 MacBook Air: scoring, retrieval, embedders and
-rerankers on the Mac, local models through Ollama, and API models called from the Mac.
+Tanush chose free tiers only, so nothing is paid. Everything that produces a number still runs on the
+M2 MacBook Air: scoring, retrieval, embedders and rerankers on the Mac, local models through Ollama,
+and free API models called from the Mac.
 
-Cost per 1,000 questions, estimate (official prices read for this plan; token counts assumed in
-Appendix A and measured in M1):
+The free tiers checked for this plan (each console shows an account's exact limits; M1 records them):
 
-| Generator (USD per million tokens in, out) | From memory | Standard recipe | Plain RAG | Agent |
-|---|---:|---:|---:|---:|
-| Claude Haiku 5.5 (0.10, 0.50) | 0.22 | 0.31 | 0.54 | 1.35 |
-| OpenAI GPT 6 Luna (0.10, 0.50) | 0.22 | 0.31 | 0.54 | 1.35 |
-| Gemini 3.1 Flash Lite (0.25, 1.50) | 0.62 | 0.85 | 1.43 | 3.60 |
-| Gemini 3.8 Flash (0.75, 3.75; doubles when the year turns) | 1.65 | 2.33 | 4.01 | 10.12 |
-| OpenAI GPT 6.1 Terra (1, 5) | 2.20 | 3.10 | 5.35 | 13.50 |
-| Claude Sonnet 5.5 (2, 10) | 4.40 | 6.20 | 10.70 | 27.00 |
+| Provider and plan | Models used | Limits per model | May train on prompts |
+|---|---|---|---|
+| Mistral, Experiment plan (phone check, no card) | Mistral Small, Medium and Large | about 1 request a second, 500,000 tokens a minute, 1 billion tokens a month | yes: the plan requires opting in |
+| Gemini API, free tier | Gemini 3.5 Flash Lite | 10 requests and 250,000 tokens a minute, 500 requests a day | yes, on the free tier |
+| Groq, free plan | gpt oss 120b, Qwen3.8 27B | 30 requests and 8,000 tokens a minute, 1,000 requests and 200,000 tokens a day | no |
+| Ollama on the Mac | Qwen3.5 9B and 4B | none; time is the limit | nothing leaves the Mac |
 
-The same questions on a local model, estimate: llama.cpp's published M2 numbers for a 7B model at 4
-bits (prompt 146 to 180 tokens a second, generation about 22) scaled to a 9B model give about 23 s a
-question from memory, about 50 s for plain RAG and about 2 minutes for the agent, whose prompts are
-long. So 450 agent questions would take 15 to 17 hours on the Mac against minutes through an API.
-Prompt length, not answer length, dominates on the Mac.
+Left out: Cerebras ended its open free tier (now a credit trial that needs a card), GitHub Models has
+been retired, and OpenRouter's free models allow 50 requests a day.
 
-The whole project, estimate: about 8,850 generated answers cost about $6 on a cheap API model;
-judging all of them costs about $17 to $33 in batch, depending on the judge; frontier models from
-memory and as the agent's generator on validation and test cost about $14. About $35 to $55 in all.
+The split (decision 14): Mistral is the development model, because only its quota holds the
+thousands of answers M3 to M6 need; Gemini 3.5 Flash Lite is the judge, from another family; Mistral
+Large and Groq's two models are the strongest free models compared; Qwen3.5 runs on the Mac. The
+whole project, estimate (Appendix A): about 12,300 generated answers and 5,500 judge calls; the
+development model's share is about 47 million tokens, under 5% of one month's quota for one model;
+the judge needs about 11 days of Gemini's daily quota, spread over the project; Groq 2 to 5 days per
+model; on the Mac, M5's runs take about 16 hours for the 9B model and 7 for the 4B, overnight. The
+client counts every limit (decision 15), so a run pauses at a limit and resumes the next day from its
+cache.
 
-Local candidates (Apache 2.0, small enough to leave room for the rest on 16 GB): Qwen3.5 9B (about
-6.6 GB at 4 bits in Ollama) and Gemma 4 E4B (about 5 GB at 4 bits). gpt oss 20b (about 14 GB in
-Ollama) is too tight beside the embedder, the reranker and Docker.
+On the Mac, estimate: llama.cpp's published M2 numbers for a 7B model at 4 bits (prompt about 180
+tokens a second on 10 GPU cores, as in the 15 inch M2 Air; generation about 22) scaled to a 9B model
+give about 23 s a question from memory, about 50 s with retrieval and about 2 minutes for the agent,
+whose prompts are long: about 10 hours for the 300 test questions. Prompt length, not answer length,
+dominates on the Mac.
+
+Local models (Apache 2.0): Qwen3.5 9B and 4B (about 6.6 and 3.4 GB at 4 bits in Ollama), one family at
+two sizes, so M5 shows what size buys. gpt oss 20b (about 14 GB in Ollama) is too tight beside the
+embedder, the reranker and Docker; Gemma 4 is left out because the judge is Google's.
+
+M5 still reports tokens per question and what 1,000 questions would cost at list prices, since cost
+is an interview question; nothing is paid.
 
 ## Decisions for the whole project
 
@@ -234,12 +245,13 @@ fewer: below a few hundred questions intervals widen and simple formulas for the
 **7. Drafted by models, written and checked by hand.**
 What: seed sections are sampled per Act (70% at random for coverage, 30% from lists of the most
 renumbered and most cited sections, for realism); a model drafts questions, gold sections, key facts
-and a short gold answer from each seed; drafts come from two model families, half each; Tanush writes
-at least a quarter of the questions himself, including every Hinglish one and most layperson
-situations. A checking script shows each draft beside the full text of its gold sections and their
-neighbours, and records accept, edit or reject against a checklist: answerable from the text alone,
-gold sections complete, key facts exactly right, wording natural and not copied from the section.
-A random 10% is checked again a week later; the agreement is reported, as the ceiling for any judge.
+and a short gold answer from each seed; drafts come from two model families, half each (Mistral Large,
+and gpt oss 120b on Groq; never Gemini, the judge's family); Tanush writes at least a quarter of the
+questions himself, including every Hinglish one and most layperson situations. A checking script shows
+each draft beside the full text of its gold sections and their neighbours, and records accept, edit or
+reject against a checklist: answerable from the text alone, gold sections complete, key facts exactly
+right, wording natural and not copied from the section. A random 10% is checked again a week later;
+the agreement is reported, as the ceiling for any judge.
 Why: drafting makes 550 questions feasible; hand checking makes them right. Drafted questions borrow
 the section's words and flatter BM25, so the share written by hand, the lexical overlap (the BM25
 rank of each gold section) and every result by author (drafted by family A, by family B, by hand)
@@ -267,36 +279,46 @@ possible keep the judge's share small. Why not RAGAS scores alone: faithfulness 
 with whatever was retrieved, not whether the law was stated right or the citation applies; RAGAS
 style faithfulness is still reported in M3 as a diagnostic.
 
-**10. A judge from another model family, validated against Tanush's labels.**
-What: one binary question at a time (is key fact k stated; does the answer contradict the gold
-answer; does section s support the statement attached to it), at temperature 0, with a pinned model
-version from a different family than the system's generator, run in batch at half price. Tanush labels
+**10. A judge from another family, validated by hand labels, used where code cannot decide.**
+What: code scores what it can: citations, abstention, and key facts it can match exactly (numbers,
+and terms such as "cognizable" and "fine"). The judge, Gemini 3.5 Flash Lite on its free tier, at
+temperature 0 and pinned by version, gets the rest in one call per answer that returns a verdict for
+each check (is key fact k stated; does the answer contradict the gold answer; does section s support
+the statement attached to it); about 40% of answers need it (estimate, measured in M1). Tanush labels
 about 150 answers from M1's baselines, balanced between pass and fail where possible: 20% supply the
 judge's examples, 40% tune its prompt, 40% measure it once. The judge is trusted when its true
 positive and true negative rates both reach 0.90; it is measured again on 100 labels of M4's agent
-answers, whose errors are subtler.
+answers, whose errors are subtler. If it still falls short after its prompt is revised, Mistral
+Large is the fallback, the one free model with quota enough; it shares the development model's family,
+so its rates are measured on fresh labels separately for Mistral's answers and for other families',
+and it is used only if they agree.
 Why: judges agree with people about as often as people agree with each other in the best studies, but
 they favour longer answers and their own family's writing, and a judge's errors bias every rate it
-produces; true positive and true negative rates are what correct that bias. Why not accuracy or
-Cohen's kappa against the labels: with few failures, accuracy hides a lenient judge; kappa is for two
-human labellers. Why not a judge from the generator's family: self preference.
+produces; true positive and true negative rates are what correct that bias. Code first keeps the
+judge's share small, and with it Gemini's 500 requests a day. Why not accuracy or Cohen's kappa
+against the labels: with few failures, accuracy hides a lenient judge; kappa is for two human
+labellers. Why not a judge from the development model's family as the first choice: self preference;
+for the same reason no Google model (Gemini or Gemma) is a system under test.
 
 **11. Intervals over seed sections, paired tests, repeated runs.**
 What: 10,000 bootstrap resamples of seed sections with all their questions (as DocLens resampled page
-designs); paired bootstrap differences with p values; each final system run three times at
-temperature 0 and its runs pooled per question, the spread between runs reported. Three comparisons
-are declared before the test read: the agent against M3's best pipeline, M3's best against the
-standard recipe, and the standard recipe against the same model from memory; all others are
+designs); paired bootstrap differences with p values; every final system on the development model run
+three times at temperature 0, its runs pooled per question and the spread between them reported
+(Mistral Large, Groq's and the local models once, for the judge's quota and the Mac's hours). Three
+comparisons are declared before the test read: the agent against M3's best pipeline, M3's best against
+the standard recipe, and the standard recipe against the same model from memory; all others are
 exploratory.
 Why: questions from one section share their difficulty, so treating them as independent makes
 intervals too narrow (Anthropic's guide to error bars on evals); below a few hundred items, intervals
 from central limit theorem formulas come out too narrow, so they come from resampling, as in DocLens;
-and API answers can differ between runs even at temperature 0, which M1 measures. Why not a test per pair of systems without declaring any: with a dozen systems, some
-difference will look significant by chance.
+and API answers can differ between runs even at temperature 0, which M1 measures. Why not a test
+per pair of systems without declaring any: with a dozen systems, some difference will look
+significant by chance.
 
 **12. Baseline 1: models answering from memory.**
-What: the three development candidates of decision 14, a local model and a frontier model answer
-every validation question with citations, no retrieval, the same output format as Dhara.
+What: Mistral Small, Medium and Large, gpt oss 120b and Qwen3.8 27B on Groq, and Qwen3.5 9B on the
+Mac answer every validation question with citations, no retrieval, in the same output format as
+Dhara.
 Why: it is what most people do today, and it measures what the models already know, including how
 often they cite the IPC for the BNS or invent sections. Why not skip it: without it, nothing says
 what retrieval adds.
@@ -304,35 +326,46 @@ what retrieval adds.
 **13. Baseline 2: the standard RAG recipe, built as tutorials build it.**
 What: LangChain's recursive character splitter at 1,000 characters with 200 of overlap over the PDF
 text, LangChain's default Hugging Face embedder, the top 4 chunks (its default for similarity search,
-checked against the installed version), one prompt that asks for citations.
+checked against the installed version), one prompt that asks for citations; run with Mistral Small
+and Medium, and with Qwen3.5 9B on the Mac.
 Why: "baselines first: measure the standard tool". This is the tool most RAG systems start as, and
 its failure (chunks that cut sections apart and lose their numbers) is what M2 sets out to fix. Why
 not a tuned baseline: then nothing would measure what the tuning bought.
 
-**14. One cheap pinned API model for development; local models measured, not developed on.**
-What: M1 compares Claude Haiku 5.5, OpenAI GPT 6 Luna and Gemini 3.1 Flash Lite from memory and in
-the standard recipe on validation, and keeps the most accurate that returns valid structured output
-nearly always, pinned by version for M1 to M4. Qwen3.5 9B and Gemma 4 E4B run through Ollama in
-M1's benchmark and in M5 on the test set; the service can use either kind.
-Why: M2 to M4 need thousands of answers; on the Mac the agent takes about 2 minutes a question
-against seconds through an API, at about $1.35 per 1,000 questions. A local model still answers the
-privacy question ("can this run offline on a laptop, and how much worse is it"), which M5 measures.
-This is the exception to "everything runs on the Mac" that working rule 6 allows by decision: the
-generator runs remotely, every number is still produced on the Mac. Why not a frontier model for
-development: 20 times the cost, while M2 to M4 compare pipelines rather than models; M5 measures
-what a frontier generator adds. Why not develop on the
-local model: weeks of compute for each round of choices.
+**14. Free tiers only: Mistral to develop on, Gemini to judge, Groq and the Mac to compare.**
+What: Tanush's choice, so nothing is paid. M1 compares Mistral Small and Medium from memory and in the
+standard recipe on validation and keeps the more accurate one that returns valid structured output
+nearly always, pinned by version for the rest of the project. Gemini 3.5 Flash Lite judges (decision
+10). Mistral Large, and gpt oss 120b and Qwen3.8 27B on Groq, are the strongest free models compared;
+Qwen3.5 9B and 4B run through Ollama in M1 (the benchmark, and the 9B in both baselines) and in M5 on
+the test set; the service can use an API or the local model.
+Why: M3 to M6 need about 15,900 development requests and 47 million tokens (Appendix A), and only
+Mistral's free plan (about a billion tokens a month per model) holds that; Gemini's 500 requests a day
+suit the judge, whose calls code keeps few; Groq's 200,000 tokens a day hold about 200 questions from
+memory or 50 with retrieval, too little to develop on. On the Mac the agent takes about 2 minutes a
+question, so local models are measured, not developed on; they answer the privacy question ("can this
+run offline on a laptop, and how much worse is it"). This is the exception to "everything runs on the
+Mac" that working rule 6 allows by decision: the generator runs remotely, every number is still
+produced on the Mac. Free tiers see the prompts, and two may train on them; every prompt holds only
+public law text and Dhara's own questions, never personal data.
+Why not paid APIs: Tanush's choice; M5 states what the same runs would cost at list prices. Why not
+Gemini to develop on: 500 requests a day would stretch M4 alone over about two weeks. Why not develop
+on the local model: weeks of compute for each round of choices.
 
-**15. Every model call through one client: cached, versioned, priced.**
-What: one interface over the providers' SDKs and Ollama; every call cached in SQLite under a hash of
+**15. Every model call through one client: cached, versioned, paced.**
+What: one interface over Mistral, Gemini, Groq and Ollama; every call cached in SQLite under a hash of
 provider, model version, messages and settings; every response stored with its tokens, seconds and
-cost; a budget cap per run; retries with backoff; a replay mode that rebuilds every table from the
-cache without a call. Each results file names the machine, the models with versions, the prompt
-hashes and the corpus manifest.
-Why: reruns cost nothing and give the same numbers; costs per question are measured, not estimated;
-an API model can change or be retired, and the cache keeps the evidence. Why not LangChain's model
-wrappers: one more layer between the code and the measured call. Why not MLflow: there is no
-training; each run's manifest and results file are enough.
+what it would cost at list prices; each provider's free limits (requests and tokens a minute and a
+day) counted by the client, calls paced to stay under them, and a run that reaches a daily limit
+stops cleanly and resumes from the cache the next day; retries with backoff when a provider answers
+429; a replay mode that rebuilds every table from the cache without a call; API keys read from a
+`.env` file that git ignores. Each results file names the machine, the models with versions, the
+prompt hashes and the corpus manifest.
+Why: reruns cost nothing and give the same numbers; tokens per question are measured, not estimated;
+free tiers answer 429 when a limit is crossed, and pacing turns that into a slower run instead of a
+broken one; an API model can change or be retired, and the cache keeps the evidence. Why not
+LangChain's model wrappers: one more layer between the code and the measured call. Why not MLflow:
+there is no training; each run's manifest and results file are enough.
 
 **16. Ollama's context set explicitly, and checked.**
 What: every local request sets `num_ctx` to fit its prompt, and a run fails if any prompt's token
@@ -345,8 +378,8 @@ code and the results file.
 **17. A benchmark before any long local run.**
 What: `scripts/bench_llm.py` measures, for each local candidate, prompt and generation tokens per
 second at the real prompt sizes (1,000 to 10,000 tokens), peak memory with the embedder and reranker
-loaded, and whether Ollama uses its MLX engine or llama.cpp on this Mac; it also notes the GPU core
-count, since the M2 Air comes with 8 or 10.
+loaded, and whether Ollama uses its MLX engine or llama.cpp on this Mac; it also records the chip's
+GPU cores (10 on the 15 inch M2 Air, as the estimates here assume).
 Why: DocLens's first CRNN run died of memory a benchmark would have shown; on a fanless Air long runs
 can also slow with heat, so the benchmark runs long enough to show it. Ollama's MLX engine first
 needed more than 32 GB, so which engine runs here must be measured.
@@ -366,12 +399,13 @@ with the models on 16 GB, and every experiment would wait on a server.
 What: one database holds sections, chunks, embeddings (pgvector, HNSW), a true BM25 index
 (pg_textsearch), the mapping and schedule tables, the answer cache, rate limits and request traces.
 Why: one system to run, back up and query with SQL joins (a hit's chapter, its old counterpart), the
-kind of store backend interviews probe (indexes, joins, transactions), and both extensions under the permissive PostgreSQL
-licence. Why not Qdrant (Apache 2.0, native hybrid search): a second store for the same few thousand
-rows, plus PostgreSQL anyway for everything else. Why not Chroma or LanceDB (Apache 2.0): good
-embedded stores, but they would sit beside PostgreSQL rather than replace it. Why not Milvus (Apache 2.0) or Weaviate
-(BSD 3 clause core): built for scale this corpus does not have. Why not ParadeDB for BM25: AGPL. A
-risk to check early in M6: a PostgreSQL image with both extensions may need building.
+kind of store backend interviews probe (indexes, joins, transactions), and both extensions under the
+permissive PostgreSQL licence. Why not Qdrant (Apache 2.0, native hybrid search): a second store for
+the same few thousand rows, plus PostgreSQL anyway for everything else. Why not Chroma or LanceDB
+(Apache 2.0): good embedded stores, but they would sit beside PostgreSQL rather than replace it. Why
+not Milvus (Apache 2.0) or Weaviate (BSD 3 clause core): built for scale this corpus does not have.
+Why not ParadeDB for BM25: AGPL. A risk to check early in M6: a PostgreSQL image with both extensions
+may need building.
 
 **20. LangGraph for the agent.**
 What: the agent as a LangGraph state graph (route, plan, act with tools, answer, verify, revise or
@@ -411,9 +445,10 @@ Why: as DocLens. Why not commit the PDFs: they are the government's to publish.
 ### M1 Baseline
 
 In this order: the corpus and its checks (decisions 3 to 5); the validation questions, then the test
-and reserve sets, sealed (decisions 6 to 8); the model client and the local benchmark (15 to 17); both
-baselines on validation (12, 13); Tanush's labels and the judge's validation (10); the scores.
-Results: `m1_corpus.md`, `m1_questions.md`, `m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
+and reserve sets, sealed (decisions 6 to 8); the free accounts with their recorded limits, the model
+client and the local benchmark (14 to 17); both baselines on validation (12, 13); Tanush's labels and
+the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_questions.md`,
+`m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
 
 ### M2 Retrieval
 
@@ -443,18 +478,20 @@ The graph: route (explicit references, language, scope; declines early what is o
 search, map old to new, classify an offence), answer, verify (code checks every citation and quote,
 then the model checks each claim against its cited section), revise once or decline. Ablations remove
 each node and each tool; budgets cap calls and tokens. Reported: M1's metrics, calls, tokens and
-seconds per question (p50, p95), cost per 1,000 questions, which tools were called and whether they
-were the right ones, and every failure sorted by kind. Results: `m4_agent.md`.
+seconds per question (p50, p95), cost per 1,000 questions at list prices, which tools were called and
+whether they were the right ones, and every failure sorted by kind. Results: `m4_agent.md`.
 
 ### M5 Comparison
 
-The test set, read once, for every frozen system: models from memory (the development model, the
-local models, the current flagship of three vendors), the standard recipe, M3's best pipeline, and
-the agent, with the development model, a frontier model and the two local models as its generator.
-A check reads 100 test questions with the same open weights served locally and by a host, to separate
-the model from its serving (DocLens's PaddleOCR VL lesson). Reported with intervals and the three
-declared paired comparisons, beside cost, latency, memory, privacy and licence. Results:
-`m5_compare.md`.
+The test set, read once, for every frozen system: models from memory (the development model, Mistral
+Large, gpt oss 120b and Qwen3.8 27B on Groq, Qwen3.5 9B and 4B on the Mac); the standard recipe on the
+development model; M3's best pipeline on the development model and both Qwen3.5 models; the agent on
+those three and Mistral Large. If a free host serves the same open weights as a local model, 100 test
+questions read through both separate the model from its serving (DocLens's PaddleOCR VL lesson); if
+none does, that is recorded as not measured. Reported with intervals and the three declared paired
+comparisons, beside tokens per question, cost at list prices, latency, memory, privacy and licence.
+Spread over days to fit the quotas: the judge about five days, Groq one or two days per model, the 9B
+model's agent about ten hours, overnight. Results: `m5_compare.md`.
 
 ### M6 Ship
 
@@ -465,8 +502,12 @@ citation). API keys, a rate limit per key, timeouts, retries and a fallback mode
 keyed by question, corpus version, prompt version and model, request traces in PostgreSQL. Measured:
 the test set through the service (scores as in M5, within the run spread), retrieval agreement with
 M2, latency p50, p95 and p99 and time to first token at 1, 4 and 16 concurrent users (Locust), errors,
-peak memory, cost. Where a public demo is hosted is decided here (TinyGPT's lesson: a free Hugging
-Face Space with a server was refused). Results: `m6_service.md`.
+peak memory. The load test drives the service with a stand in model that replays the latencies
+recorded in M5, because free tiers cap requests a minute far below 16 users; the test set's run
+through the service, one request at a time, reports what a user really waits on the free tier. Where a
+public demo is hosted is decided here (TinyGPT's lesson: a free Hugging Face Space with a server was
+refused); a demo on a free tier is bounded by that tier's quota and terms, and its page says which
+provider sees the questions (Groq states it does not train on them). Results: `m6_service.md`.
 
 ## What interviews ask, and where Dhara answers it
 
@@ -493,7 +534,7 @@ src/dhara/
   refs.py         section references in questions ("s. 498A IPC", "dhara 302")
   chunking.py     the recipe's chunks, sections with headers, clauses with parents
   retrieval/      bm25, dense, fusion, rerank: exact and in process (M2)
-  llm.py          one client: providers and Ollama, cache, tokens, cost, budget
+  llm.py          one client: Mistral, Gemini, Groq and Ollama; cache, tokens, quota pacing
   answer.py       structured answers, citation and quote checks (M3)
   agent.py        the LangGraph agent and its tools (M4)
   judge.py        the judge's binary checks
@@ -510,6 +551,7 @@ tests/            unit tests, and end to end tests with the fake model
 docs/             PLAN.md and results/
 Dockerfile, compose.yaml, .github/workflows/ci.yml, pyproject.toml, LICENSE
 data/, runs/      downloads, caches and outputs, never committed
+.env.example      the API keys Dhara reads; the real .env is never committed
 ```
 
 Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLens, ruff and mypy.
@@ -524,37 +566,57 @@ Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLen
   overlap and results by author reported (decision 7).
 * **The judge is wrong:** validated twice, code checks first (decisions 9, 10).
 * **API models change or retire:** pinned versions, the cache, a local model as a stable reference.
-* **Costs grow:** the cache, a budget cap, batch judging (about $35 to $55 in all, estimate).
+* **Test questions reach providers that may train on them** (Mistral's free plan, Gemini's free
+  tier): the models measured are versions pinned before the questions were written, so they cannot
+  have learned them; results name the versions, and a later version is compared only on fresh
+  questions.
+* **Free tiers change or vanish** (Cerebras ended its free tier; GitHub Models was retired): the
+  cache keeps every answer already used, three providers and the Mac back each other up, and M1
+  records the limits each account really has.
 * **The Mac's limits:** 16 GB, a fanless Air that slows with heat, Ollama's silent truncation
   (decisions 16, 17).
 * **Hand work:** about 18 hours for the questions and 6 for the judge's labels; the checking script
   shows everything needed on one screen.
 
-## For Tanush to decide before M1
+## Decided by Tanush
 
-1. The name: `Dhara`, or another.
-2. The API budget: about $35 to $55 over the project (estimate), or free tiers only (rate limited,
-   and Gemini's free tier uses prompts to improve Google's products), or local only (hours per run).
-3. The hand work: about 24 hours for 550 questions and 250 labels; or a smaller test set (200
-   questions, intervals about plus or minus 6.4 points instead of 5.2).
-4. The scope: the six criminal law Acts (recommended), or more Acts from the start.
+1. The name: Dhara.
+2. Free tiers only: nothing is paid (decision 14).
+3. 550 hand checked questions: validation 150, test 300, reserve 100 (decision 6).
+4. The six criminal law Acts (decision 1).
+
+## To confirm in your review
+
+* Three free accounts before M1: Mistral (a phone check, and the Experiment plan requires opting in
+  to training on your prompts), Google AI Studio for a Gemini API key (free tier prompts may be used
+  to improve Google's products), and Groq (states it does not train on API data). Every prompt holds
+  only public law text and Dhara's own questions.
 
 ## Appendix A: the arithmetic behind the estimates
 
-Tokens per question, in and out (assumed; M1 measures them): from memory 700 and 300; the standard
-recipe 1,600 and 300 (four chunks); plain RAG 3,600 and 350 (eight sections); the agent 9,000 and
-900 (three or four calls). Judge: 2,500 and 250 per answer. Cost per 1,000 questions is
-1,000 × (tokens in × price in + tokens out × price out) / 1,000,000.
+Tokens per request, in plus out (assumed; M1 measures them): from memory 1,000; the standard recipe
+1,900 (four chunks); plain RAG 3,950 (eight sections); an agent call 3,000, at 3.3 calls a question;
+a judge call 2,750.
 
-Answers over the project: from memory 2,250 (five models, three runs each on validation; their
-test reads add cents); the recipe 750 (three candidates on validation, once on test); plain RAG 2,700 (12 settings on validation, three runs on test); the agent 3,150 (15
-settings and ablations on validation, three runs on test); 8,850 in all, about $6.42 on Claude Haiku
-5.5. Judging them all in batch: about $33 with Claude Sonnet 5.5, about $17 with GPT 6.1 Terra.
-Frontier runs: about $14.
+Answers over the project: M1, six models from memory and three in the recipe on 150 validation
+questions; M3, 12 settings; M4, 15 settings and ablations; M5, the test set for every system listed
+there, each system on the development model three times; M6, the test set once more through the
+service: about 12,300 answers. If code scores 60% of them alone (estimate), the judge makes about
+4,900 calls, and about 600 more while its prompt is tuned and validated: 5,500 calls, 15 million
+tokens, 11 days of Gemini's 500 requests a day. Drafting: about 600 drafts, half per family, two a
+call at 3,700 tokens. The development model in M3 to M6: about 15,900 requests and 47 million tokens;
+all Mistral models together about 18,100 requests, 5 hours at one request a second (151 hours if the
+limit were 2 requests a minute, as one guide states). Groq: gpt oss 120b 600 requests and 1.0 million
+tokens with its drafts, 5 days at 200,000 tokens a day; Qwen3.8 27B 450 requests and 0.45 million
+tokens, 2.2 days. On the Mac (the 15 inch M2 Air has 10 GPU cores; estimate): the 300 test questions
+take the 9B model 1.9 hours from memory, 3.9 with retrieval and 9.8 as the agent (15.5 in all), and
+the 4B model 0.8, 1.7 and 4.3 (6.9 in all).
 
 Local speed: llama.cpp on the M2 with a 7B model at 4 bits processes 146 (8 GPU cores) to 180 (10
-cores) prompt tokens a second and generates about 22 tokens a second; scaled by 7/9 for a 9B model,
-seconds per question are tokens in / prompt speed + tokens out / generation speed.
+cores) prompt tokens a second and generates about 22 tokens a second; scaled by 7/9 for a 9B model
+and 7/4 for a 4B model, seconds per question are tokens in / prompt speed + tokens out / generation
+speed, with 700, 3,600 and 9,000 tokens in and 300, 350 and 900 out from memory, with retrieval and
+as the agent.
 
 Interval half widths, 1.96 × √(p(1 − p)/n): at n = 300, 5.7 points at p = 0.5 and 5.2 at 0.7; at
 n = 150, 7.3 at 0.7; at n = 200, 6.4 at 0.7. Smallest paired difference detected at α = 0.05 with
@@ -574,11 +636,18 @@ Data and law:
 * State amendments: <https://prsindia.org/files/bills_acts/bills_states/tamil-nadu/2025/Bill2of2025TN.pdf>
 * IL TUR (licence CC BY NC SA 4.0): <https://huggingface.co/datasets/Exploration-Lab/IL-TUR>
 
-Models, prices and speed:
-* Anthropic prices: <https://platform.claude.com/docs/en/about-claude/pricing>
-* OpenAI prices: <https://developers.openai.com/api/docs/pricing>
+Free tiers:
+* Gemini free tier limits (a summary of AI Studio's figures): <https://www.scriptbyai.com/gemini-api-free-tier-limits/>; rate limits: <https://ai.google.dev/gemini-api/docs/rate-limits>
+* Groq free plan limits: <https://www.developersdigest.tech/models/free-api/groq>; Groq's data terms: <https://standardcompute.com/providers/groq>
+* Mistral's Experiment plan: <https://mintlify.com/cheahjs/free-llm-api-resources/providers/free/mistral-plateforme>
+* Cerebras ends its free tier: <https://claudelog.com/faqs/is-cerebras-free/>; GitHub Models retired: <https://fast.io/resources/github-models-rate-limit/>; OpenRouter's free limits: <https://blogs.novita.ai/free-llm-api-comparison-2026/>
+
+Models, list prices and speed:
+* Mistral prices: <https://docs.mistral.ai/inference/pricing>
+* Groq prices: <https://www.groq.com/pricing>; per model, from GroqCloud's documentation: <https://www.morphllm.com/groq-pricing>
 * Gemini prices: <https://ai.google.dev/gemini-api/docs/pricing>
 * llama.cpp on Apple silicon: <https://github.com/ggml-org/llama.cpp/discussions/4167>
+* The 15 inch M2 MacBook Air (10 GPU cores in every configuration): <https://www.notebookcheck.net/First-ever-15-inch-Apple-MacBook-Air-powered-by-M2-launched-configurations-start-from-US-1-299.723979.0.html>
 * Ollama's MLX engine: <https://ollama.com/blog/mlx>; context defaults: <https://fast.io/resources/ollama-context-length/>
 * Qwen3.5 small models: <https://artificialanalysis.ai/articles/qwen3-5-small-models>
 * BGE M3 <https://huggingface.co/BAAI/bge-m3>, BGE reranker v2 m3 <https://huggingface.co/BAAI/bge-reranker-v2-m3>, Qwen3 Reranker <https://huggingface.co/Qwen/Qwen3-Reranker-0.6B>
