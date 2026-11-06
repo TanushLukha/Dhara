@@ -1,0 +1,608 @@
+# Dhara plan (draft for review)
+
+Dhara (धारा, "section" in Hindi, as in "dhara 420") answers questions about India's criminal law
+Acts and cites the sections it relies on. It is built in six measured steps, as DocLens was, and every
+step is compared with what people actually use: a large language model answering from memory, and
+the standard RAG recipe from tutorials.
+
+Status: a draft for review; nothing is built yet. Numbers marked "estimate" come from the sources at
+the end and the arithmetic in Appendix A; M1 replaces each of them with a measurement on the M2
+MacBook Air. Nothing here is legal advice: Dhara reports what the text of the Acts says.
+
+## What Dhara is, and why it is worth building
+
+The Bharatiya Nyaya Sanhita (BNS), the Bharatiya Nagarik Suraksha Sanhita (BNSS) and the Bharatiya
+Sakshya Adhiniyam (BSA) replaced the Indian Penal Code (IPC), the Code of Criminal Procedure (CrPC)
+and the Indian Evidence Act (IEA). Sections were renumbered (cheating, IPC 420, is now BNS 318;
+murder's punishment, IPC 302, is BNS 103; sedition, IPC 124A, gave way to BNS 152), offences were
+added and merged, and offences committed before the change still fall under the old Acts. So a model
+answering from memory is likely to mix the two codes or invent a section, and retrieval alone does not
+fix that: Stanford's study of commercial legal research tools built on retrieval found hallucinated
+answers to 17% to 33% of its questions.
+
+What the project shows:
+
+* **RAG done properly:** statutes parsed into sections with their hierarchy; BM25, dense, hybrid and
+  reranked retrieval, each measured against the same questions.
+* **An agent that has to earn its place:** a LangGraph agent with exact lookup tools, a check of every
+  citation before it answers, and abstention when the Acts do not say; ablations show what each part
+  adds and what it costs.
+* **Evaluation discipline:** a hand checked question set, a judge validated against hand labels,
+  intervals and paired tests, a test set read once.
+* **Backend engineering:** FastAPI with streaming, PostgreSQL with pgvector and BM25, Docker Compose,
+  caching, rate limits, a load test with latency percentiles, CI.
+* **Deployment trade offs:** a local model on the Mac against API models, in accuracy, latency, cost
+  per thousand questions and privacy.
+
+The question running through it: how often does Dhara answer a question about India's criminal law
+Acts correctly and cite the right section, what does each piece add (structure aware chunks, hybrid
+search, reranking, an agent that plans, retrieves again and checks its citations), measured against a
+model answering from memory and the standard RAG recipe, and at what latency and cost?
+
+Roles (ROLE_STRATEGY.md): AI engineer, paired with TinyGPT; SDE backend, paired with P11.
+
+## Milestones
+
+| Milestone | Question | Built | Measured on |
+|---|---|---|---|
+| M1 Baseline | How well do LLMs answer from memory, and how well does the standard RAG recipe do, on a hand checked question set scored one way for every system? | the corpus as sections, the question sets, the scorer, a validated judge, an LLM client with cache and costs, a benchmark of local models | validation questions: accurate rate, hallucination rate, citation F1, abstention, latency, cost |
+| M2 Retrieval | Which retrieval puts the right sections in front of the model, and what does each choice add? | section aware chunks, BM25, dense embedders, hybrid fusion, rerankers, direct section lookup | validation questions: recall at k, MRR and nDCG@10 at the section level, latency |
+| M3 Answers | Given the sections found, how often is the answer right and rightly cited, and how much is lost to finding rather than answering? | a grounded answer generator with structured citations, citation checks, the oracle ceiling | validation questions: M1's metrics with oracle, best and standard retrieval |
+| M4 Agent | What does an agent add over M3's best pipeline, and at what cost in calls, tokens and seconds? | a LangGraph agent: routing, planning, lookup, mapping and classification tools, retrieving again, citation verification, abstention | validation questions: M1's metrics, ablations, calls and latency per question |
+| M5 Comparison | On the sealed test set, read once, where does Dhara stand against frontier models answering from memory and the standard recipe, and what do local and API models trade? | one harness for every frozen system and generator | test questions: every metric with intervals, latency p50 and p95, cost per 1,000 questions, memory, licence |
+| M6 Ship | Can someone use it, does the service answer as M5 measured, and at what latency under load? | FastAPI service with streaming, PostgreSQL (pgvector, BM25), Docker Compose, a demo page, CI | the test set through the service, load test percentiles, retrieval agreement with M2 |
+
+Each milestone leaves code the next one reuses, ends with "What M<n> found, and what it means for
+M<n+1>", and is done only when lint, type checks and every test pass locally and CI is green.
+
+## Data
+
+### The Acts
+
+| Act | Replaced | Numbered sections | Notes |
+|---|---|---:|---|
+| Bharatiya Nyaya Sanhita, 2023 (BNS) | IPC | 358 | 20 chapters in India Code's arrangement of sections |
+| Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS) | CrPC | 531 | its First Schedule classifies every BNS offence |
+| Bharatiya Sakshya Adhiniyam, 2023 (BSA) | IEA | 170 | |
+| Indian Penal Code, 1860 (IPC) | | 511 | plus lettered sections such as 304B and 498A |
+| Code of Criminal Procedure, 1973 (CrPC) | | 484 | plus lettered sections such as 54A |
+| Indian Evidence Act, 1872 (IEA) | | 167 | plus lettered sections such as 65B |
+
+Together about 2,200 numbered sections, more with the lettered ones; M1 counts them exactly. Two
+tables come with them: the BNSS First Schedule (for each offence: punishment, cognizable or not,
+bailable or not, which court tries it) and the correspondence between old and new sections, compiled
+from tables the government has published (for example the BNS to IPC comparison summary of the
+Central Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts).
+
+### Questions
+
+| Set | What | Size | Used in |
+|---|---|---:|---|
+| Validation | hand checked questions, gold sections, key facts, answerable or not | 150 | every choice in M1 to M4 |
+| Test | the same, drawn from other sections, sealed | 300 | read once in M5; again in M6 through the service |
+| Reserve | the same, sealed | 100 | only if a fault found on the test set forces a fresh test (working rule 5) |
+| Judge labels | Tanush's pass or fail labels of system answers | about 150 in M1, 100 in M4 | validating the judge |
+| IL TUR statute identification (optional) | case facts from court judgments with the IPC sections they cite | a sample of its test split | a held out retrieval check in M2 |
+
+Question types, for the 300 test questions (validation and reserve in the same shares):
+
+| Answerable (240) | | Not answerable from the Acts (60) | |
+|---|---:|---|---:|
+| what a section says, asked by number | 30 | false premise (a section or offence that does not exist) | 15 |
+| punishment | 40 | outside the Acts (case law, interpretation, other laws, state amendments) | 25 |
+| definition | 25 | advice or prediction ("should I", "will I win") | 10 |
+| procedure (BNSS, CrPC) | 35 | underspecified | 10 |
+| evidence (BSA, IEA) | 25 | | |
+| classification (bailable, cognizable, which court) | 20 | | |
+| old to new mapping | 25 | | |
+| what changed between old and new | 15 | | |
+| needs two or more sections | 15 | | |
+| which law applies, by when the offence happened | 10 | | |
+
+Across types: about 40% asked the way a layperson would ask (a situation, not a section number), and
+about 10% in Hinglish ("dhara 420 kya hai"); every Act covered.
+
+## How results are scored
+
+The unit of a citation is an Act and a section number (BNS 103); subsections are scored as a second,
+stricter level. Every question carries its required gold sections, sections that are also acceptable,
+and key facts: short, checkable statements the answer must contain ("imprisonment up to seven years",
+"and fine").
+
+* **Accurate** (the headline): an answerable question answered correctly and grounded, or an
+  unanswerable one declined (or its false premise corrected). The terms are adapted from Stanford's
+  legal research study: **correct** means every key fact is stated and nothing contradicts the gold answer;
+  **grounded** means each key statement cites a section that supports it.
+* **Hallucinated:** an incorrect statement, or a misgrounded one: a cited section that does not exist,
+  does not support the statement, or does not apply (the repealed IPC cited for an offence the BNS
+  governs).
+* **Incomplete:** an answerable question declined, or answered without citations.
+* **Citation precision, recall and F1:** cited sections that are gold, over cited sections; required
+  gold sections cited, over required ones.
+* **Abstention:** precision and recall of declining, over the answerable flag.
+* **Code confusion:** the share of answers citing the old code where the new one applies, or the
+  reverse. Specific to this corpus, and the failure most worth a story.
+* **Retrieval (M2):** recall at 1, 5, 10 and 20 (every required section found, and any found), MRR
+  and nDCG@10, at the section level.
+* **Cost and speed:** tokens and calls per question, seconds per question (p50, p95), USD per 1,000
+  questions, peak memory.
+
+Every rate comes with a bootstrap 95% interval over questions grouped by their seed section, and
+systems are compared in pairs on the same questions (decision 11).
+
+## Models, and what runs where
+
+Everything that produces a number runs on the M2 MacBook Air: scoring, retrieval, embedders and
+rerankers on the Mac, local models through Ollama, and API models called from the Mac.
+
+Cost per 1,000 questions, estimate (official prices read for this plan; token counts assumed in
+Appendix A and measured in M1):
+
+| Generator (USD per million tokens in, out) | From memory | Standard recipe | Plain RAG | Agent |
+|---|---:|---:|---:|---:|
+| Claude Haiku 5.5 (0.10, 0.50) | 0.22 | 0.31 | 0.54 | 1.35 |
+| OpenAI GPT 6 Luna (0.10, 0.50) | 0.22 | 0.31 | 0.54 | 1.35 |
+| Gemini 3.1 Flash Lite (0.25, 1.50) | 0.62 | 0.85 | 1.43 | 3.60 |
+| Gemini 3.8 Flash (0.75, 3.75; doubles when the year turns) | 1.65 | 2.33 | 4.01 | 10.12 |
+| OpenAI GPT 6.1 Terra (1, 5) | 2.20 | 3.10 | 5.35 | 13.50 |
+| Claude Sonnet 5.5 (2, 10) | 4.40 | 6.20 | 10.70 | 27.00 |
+
+The same questions on a local model, estimate: llama.cpp's published M2 numbers for a 7B model at 4
+bits (prompt 146 to 180 tokens a second, generation about 22) scaled to a 9B model give about 23 s a
+question from memory, about 50 s for plain RAG and about 2 minutes for the agent, whose prompts are
+long. So 450 agent questions would take 15 to 17 hours on the Mac against minutes through an API.
+Prompt length, not answer length, dominates on the Mac.
+
+The whole project, estimate: about 8,850 generated answers cost about $6 on a cheap API model;
+judging all of them costs about $17 to $33 in batch, depending on the judge; frontier models from
+memory and as the agent's generator on validation and test cost about $14. About $35 to $55 in all.
+
+Local candidates (Apache 2.0, small enough to leave room for the rest on 16 GB): Qwen3.5 9B (about
+6.6 GB at 4 bits in Ollama) and Gemma 4 E4B (about 5 GB at 4 bits). gpt oss 20b (about 14 GB in
+Ollama) is too tight beside the embedder, the reranker and Docker.
+
+## Decisions for the whole project
+
+Each decision: what we did, why, and why not the alternatives.
+
+**1. Name and scope: Dhara, the six criminal law Acts.**
+What: the repository `Dhara` (package `dhara`), covering BNS, BNSS, BSA and the IPC, CrPC and IEA
+they replaced, with the BNSS First Schedule and the old to new correspondence.
+Why: the old and new codes side by side give the questions that break models (renumbered sections,
+merged offences, which law applies when), and every answer can be checked against a short, fixed
+text. "Dhara" is what people say ("dhara 302"), and the section is the unit Dhara must cite.
+Why not more Acts (IT Act, POCSO, NDPS): more text adds little that is new to measure and more to
+check by hand; they can be added after M6 with the same pipeline. Why not judgments: Dhara answers
+from statute text, which a non lawyer can check; case law is out of scope (decision 2).
+
+**2. An answer is what the text of the Acts says.**
+What: gold answers come from the Acts' text only. Questions that need case law, interpretation,
+state amendments or advice are unanswerable by design, and Dhara must decline them and say why. The
+service states that it is not legal advice and links every citation to its section's text.
+Why: Tanush is not a lawyer, so every gold answer must be checkable by reading the cited sections; it
+also gives abstention a precise target. States can amend these Acts for their own territory (Tamil
+Nadu and Maharashtra have brought bills amending the BNS in their application), so "the central
+text" is the honest scope.
+Why not answer interpretive questions anyway: their gold answers could not be checked here, and a
+wrong confident answer is the failure the project is about.
+
+**3. India Code as the source, pinned.**
+What: the official PDFs of the six Acts from India Code, the Legislative Department's portal,
+downloaded by a script that records each file's URL, its "as on" note and its SHA256 in
+`data/MANIFEST.json`; India Code's per section web pages as a cross check on a sample. The PDFs are
+not committed; the service shows a section's text beside its own answer.
+Why: India Code states that its PDFs reproduce the officially adopted text and that the English
+version prevails. Section 52(1)(q)(ii) of the Copyright Act permits reproducing an Act together with
+commentary or other original matter, which is how Dhara shows text (this is a reading of the statute
+and of PRS India's note, not legal advice). Pinning makes every number name its exact text.
+Why not the Hugging Face scrape of India Code (`sukantan/nyaya-acts`): it states no licence and no
+date. Why not commercial bare acts: copyright, and their editors' notes are not the law. Why not the
+Hindi texts: India Code says the English version prevails; Hinglish questions are covered instead.
+
+**4. Sections with their hierarchy as the unit.**
+What: each Act parsed into Part, Chapter, Section, subsection and clause; explanations, illustrations
+and provisos kept with their section; lettered sections (498A) and omitted ones recorded; footnotes
+(amendment history) kept as metadata, out of the retrieval text. Parsed with pdfplumber, which reads
+font sizes and positions. Checks: the parsed section numbers equal each Act's arrangement of
+sections; 30 random sections compared by hand with India Code's section pages.
+Why: the section is what users cite and what Dhara must cite, and the hierarchy gives headings and
+chapter context to retrieval. Footnotes look like law but are editorial history.
+Why not PyMuPDF: AGPL. Why not fixed size chunks as the stored unit: they cut sections apart, which is
+exactly what the standard recipe does and what M2 measures against.
+
+**5. The two tables as data, checked by hand.**
+What: the BNSS First Schedule parsed into rows (section, offence, punishment, cognizable, bailable,
+court); the correspondence table compiled from the government published tables, many to many (one
+BNS section can replace several IPC sections). Both checked against the Acts on a random sample of 50
+rows each.
+Why: "is it bailable" and "what replaced IPC 420" are among the commonest questions, and both are
+lookups in a table, not semantic search; the agent gets them as tools (M4). Why not leave them to
+retrieval: a schedule row read as text loses its columns; M4 measures what the tools add.
+
+## Decisions in M1
+
+**6. Three question sets: validation 150, test 300, reserve 100.**
+What: the sizes and type shares in the tables above; 80% answerable, 20% not; about 40% in a
+layperson's words and 10% in Hinglish.
+Why: at 300 questions a rate near 70% has a 95% interval of about plus or minus 5.2 points, and a
+paired comparison detects a difference of 5 to 8 points (Appendix A); 150 validation questions are
+enough to choose settings. The reserve exists because working rule 5 needs a fresh test set if a
+fault is found on this one, and writing one later costs weeks.
+Why not more: every question is checked by hand (about 18 hours for 550 at 2 minutes each). Why not
+fewer: below a few hundred questions intervals widen and simple formulas for them stop holding.
+
+**7. Drafted by models, written and checked by hand.**
+What: seed sections are sampled per Act (70% at random for coverage, 30% from lists of the most
+renumbered and most cited sections, for realism); a model drafts questions, gold sections, key facts
+and a short gold answer from each seed; drafts come from two model families, half each; Tanush writes
+at least a quarter of the questions himself, including every Hinglish one and most layperson
+situations. A checking script shows each draft beside the full text of its gold sections and their
+neighbours, and records accept, edit or reject against a checklist: answerable from the text alone,
+gold sections complete, key facts exactly right, wording natural and not copied from the section.
+A random 10% is checked again a week later; the agreement is reported, as the ceiling for any judge.
+Why: drafting makes 550 questions feasible; hand checking makes them right. Drafted questions borrow
+the section's words and flatter BM25, so the share written by hand, the lexical overlap (the BM25
+rank of each gold section) and every result by author (drafted by family A, by family B, by hand)
+are reported. Why not draft with one model: a model may find its own phrasing easiest.
+Why not only hand written questions: too slow for 550 with gold sections and key facts.
+
+**8. Split by seed section, sealed, read once.**
+What: no seed section gives questions to two sets (a mapping question's cluster is its BNS section,
+with the IPC section it replaced). The test and reserve files are committed when checked, their
+SHA256 written in this plan, and the loader refuses them unless a run is marked final; every final
+read is appended to `docs/results/test_reads.md`. The test set is read once, in M5, for every frozen
+system, and once more in M6 through the service, which chooses nothing.
+Why: prompts, retrieval settings and agent logic are tuned by reading failures, which overfits fast
+to whatever set is looked at; a read log makes "read once" checkable. Why not read the test set at
+the end of each milestone, as DocLens did: DocLens's choices were mostly trained, these are mostly
+hand tuned, and each read of 300 questions leaks more. So M1 to M4 report validation numbers and say
+so; DocLens M4 showed validation flattering by 1.2 to 2.5 points, and M5 measures the gap again.
+
+**9. Accurate, hallucinated and incomplete, adapted from Stanford's legal study.**
+What: the metrics in "How results are scored"; citations parsed and checked in code (does the section
+exist, was it in the context, does a quoted phrase occur in it), the rest judged (decision 10).
+Why: legal answers fail in two ways, wrong and misgrounded (right, but citing a section that does not
+say it), and the second is the more dangerous because it looks verified. Deterministic checks where
+possible keep the judge's share small. Why not RAGAS scores alone: faithfulness measures agreement
+with whatever was retrieved, not whether the law was stated right or the citation applies; RAGAS
+style faithfulness is still reported in M3 as a diagnostic.
+
+**10. A judge from another model family, validated against Tanush's labels.**
+What: one binary question at a time (is key fact k stated; does the answer contradict the gold
+answer; does section s support the statement attached to it), at temperature 0, with a pinned model
+version from a different family than the system's generator, run in batch at half price. Tanush labels
+about 150 answers from M1's baselines, balanced between pass and fail where possible: 20% supply the
+judge's examples, 40% tune its prompt, 40% measure it once. The judge is trusted when its true
+positive and true negative rates both reach 0.90; it is measured again on 100 labels of M4's agent
+answers, whose errors are subtler.
+Why: judges agree with people about as often as people agree with each other in the best studies, but
+they favour longer answers and their own family's writing, and a judge's errors bias every rate it
+produces; true positive and true negative rates are what correct that bias. Why not accuracy or
+Cohen's kappa against the labels: with few failures, accuracy hides a lenient judge; kappa is for two
+human labellers. Why not a judge from the generator's family: self preference.
+
+**11. Intervals over seed sections, paired tests, repeated runs.**
+What: 10,000 bootstrap resamples of seed sections with all their questions (as DocLens resampled page
+designs); paired bootstrap differences with p values; each final system run three times at
+temperature 0 and its runs pooled per question, the spread between runs reported. Three comparisons
+are declared before the test read: the agent against M3's best pipeline, M3's best against the
+standard recipe, and the standard recipe against the same model from memory; all others are
+exploratory.
+Why: questions from one section share their difficulty, so treating them as independent makes
+intervals too narrow (Anthropic's guide to error bars on evals); below a few hundred items, intervals
+from central limit theorem formulas come out too narrow, so they come from resampling, as in DocLens;
+and API answers can differ between runs even at temperature 0, which M1 measures. Why not a test per pair of systems without declaring any: with a dozen systems, some
+difference will look significant by chance.
+
+**12. Baseline 1: models answering from memory.**
+What: the three development candidates of decision 14, a local model and a frontier model answer
+every validation question with citations, no retrieval, the same output format as Dhara.
+Why: it is what most people do today, and it measures what the models already know, including how
+often they cite the IPC for the BNS or invent sections. Why not skip it: without it, nothing says
+what retrieval adds.
+
+**13. Baseline 2: the standard RAG recipe, built as tutorials build it.**
+What: LangChain's recursive character splitter at 1,000 characters with 200 of overlap over the PDF
+text, LangChain's default Hugging Face embedder, the top 4 chunks (its default for similarity search,
+checked against the installed version), one prompt that asks for citations.
+Why: "baselines first: measure the standard tool". This is the tool most RAG systems start as, and
+its failure (chunks that cut sections apart and lose their numbers) is what M2 sets out to fix. Why
+not a tuned baseline: then nothing would measure what the tuning bought.
+
+**14. One cheap pinned API model for development; local models measured, not developed on.**
+What: M1 compares Claude Haiku 5.5, OpenAI GPT 6 Luna and Gemini 3.1 Flash Lite from memory and in
+the standard recipe on validation, and keeps the most accurate that returns valid structured output
+nearly always, pinned by version for M1 to M4. Qwen3.5 9B and Gemma 4 E4B run through Ollama in
+M1's benchmark and in M5 on the test set; the service can use either kind.
+Why: M2 to M4 need thousands of answers; on the Mac the agent takes about 2 minutes a question
+against seconds through an API, at about $1.35 per 1,000 questions. A local model still answers the
+privacy question ("can this run offline on a laptop, and how much worse is it"), which M5 measures.
+This is the exception to "everything runs on the Mac" that working rule 6 allows by decision: the
+generator runs remotely, every number is still produced on the Mac. Why not a frontier model for
+development: 20 times the cost, while M2 to M4 compare pipelines rather than models; M5 measures
+what a frontier generator adds. Why not develop on the
+local model: weeks of compute for each round of choices.
+
+**15. Every model call through one client: cached, versioned, priced.**
+What: one interface over the providers' SDKs and Ollama; every call cached in SQLite under a hash of
+provider, model version, messages and settings; every response stored with its tokens, seconds and
+cost; a budget cap per run; retries with backoff; a replay mode that rebuilds every table from the
+cache without a call. Each results file names the machine, the models with versions, the prompt
+hashes and the corpus manifest.
+Why: reruns cost nothing and give the same numbers; costs per question are measured, not estimated;
+an API model can change or be retired, and the cache keeps the evidence. Why not LangChain's model
+wrappers: one more layer between the code and the measured call. Why not MLflow: there is no
+training; each run's manifest and results file are enough.
+
+**16. Ollama's context set explicitly, and checked.**
+What: every local request sets `num_ctx` to fit its prompt, and a run fails if any prompt's token
+count exceeds it.
+Why: on a Mac with under 24 GiB of GPU memory Ollama defaults to a 4,096 token context and drops the
+excess silently; an agent prompt with eight sections exceeds it, and the model would quietly answer
+from half its evidence. Why not raise the server default: a per request setting is visible in the
+code and the results file.
+
+**17. A benchmark before any long local run.**
+What: `scripts/bench_llm.py` measures, for each local candidate, prompt and generation tokens per
+second at the real prompt sizes (1,000 to 10,000 tokens), peak memory with the embedder and reranker
+loaded, and whether Ollama uses its MLX engine or llama.cpp on this Mac; it also notes the GPU core
+count, since the M2 Air comes with 8 or 10.
+Why: DocLens's first CRNN run died of memory a benchmark would have shown; on a fanless Air long runs
+can also slow with heat, so the benchmark runs long enough to show it. Ollama's MLX engine first
+needed more than 32 GB, so which engine runs here must be measured.
+
+## Decisions planned for later milestones (settled by measurement there)
+
+**18. Retrieval researched in process, served from PostgreSQL, checked equal.**
+What: M2 runs exact search in process (embeddings as a NumPy matrix, BM25 with `bm25s`, fusion in
+Python); M6 serves from PostgreSQL and measures that the service's top results match the reference
+(overlap of the top 10, and recall of the approximate index against exact search).
+Why: at a few thousand chunks exact search takes milliseconds, has no approximation error and keeps
+experiments fast and repeatable; DocLens's lesson is to measure the serving path, as its ONNX graph
+was checked against PyTorch. Why not build on the database from M2: Docker's memory would compete
+with the models on 16 GB, and every experiment would wait on a server.
+
+**19. PostgreSQL with pgvector and pg_textsearch for the service.**
+What: one database holds sections, chunks, embeddings (pgvector, HNSW), a true BM25 index
+(pg_textsearch), the mapping and schedule tables, the answer cache, rate limits and request traces.
+Why: one system to run, back up and query with SQL joins (a hit's chapter, its old counterpart), the
+kind of store backend interviews probe (indexes, joins, transactions), and both extensions under the permissive PostgreSQL
+licence. Why not Qdrant (Apache 2.0, native hybrid search): a second store for the same few thousand
+rows, plus PostgreSQL anyway for everything else. Why not Chroma or LanceDB (Apache 2.0): good
+embedded stores, but they would sit beside PostgreSQL rather than replace it. Why not Milvus (Apache 2.0) or Weaviate
+(BSD 3 clause core): built for scale this corpus does not have. Why not ParadeDB for BM25: AGPL. A
+risk to check early in M6: a PostgreSQL image with both extensions may need building.
+
+**20. LangGraph for the agent.**
+What: the agent as a LangGraph state graph (route, plan, act with tools, answer, verify, revise or
+abstain), with loop and token limits, its state checkpointed, its steps streamed.
+Why: the agent is a state machine with cycles (retrieve again, revise), which LangGraph models
+directly; it is MIT licensed and stable since its 1.0 release; it is the framework AI engineer roles
+ask about and the one on Tanush's list. Why not Pydantic AI (MIT): its strength is typed outputs and
+provider portability, while cycles, checkpoints and streamed steps are LangGraph's core. Why not the
+OpenAI Agents SDK, CrewAI or Microsoft's Agent Framework (all MIT): they centre on agent loops,
+handoffs or roles, where Dhara needs explicit control flow it can ablate node by node. Why not a
+plain Python loop: possible, and kept as the M3 pipeline the agent must beat; the graph earns its
+place only if M4's ablations say so.
+
+**21. FastAPI with streaming, Docker Compose, the model outside the containers.**
+What: FastAPI with native Server Sent Events (since FastAPI 0.135) streams the agent's steps and the
+answer; Compose runs the API and PostgreSQL; the model is an API, or Ollama running natively on the
+Mac and reached from the containers.
+Why: SSE is one way, plain HTTP and enough for streaming text; Docker containers on a Mac get no
+Apple GPU, so a model inside one would run on the CPU. Why not WebSockets: two way channels the
+service does not need.
+
+**22. CI as in DocLens, with a fake model.**
+What: GitHub Actions with DocLens's `scripts/ci_step.sh` and `scripts/ci_annotate.py`: lint, types
+and tests; then the image built, Compose started with PostgreSQL, and an end to end check over HTTP. A
+deterministic fake model replaces every LLM in CI, so no API keys are stored and runs are free.
+Why: DocLens's CI failed for 13 pushes before anyone looked; annotations make failures readable
+through the public API. Why not real models in CI: secrets in a public repository, costs on every
+push, and answers that vary.
+
+**23. MIT licence; data and models keep theirs.**
+What: the code under MIT; the PDFs downloaded, not committed; questions and labels committed as
+Dhara's own work; models under their own licences, listed in the README.
+Why: as DocLens. Why not commit the PDFs: they are the government's to publish.
+
+## The six milestones in detail
+
+### M1 Baseline
+
+In this order: the corpus and its checks (decisions 3 to 5); the validation questions, then the test
+and reserve sets, sealed (decisions 6 to 8); the model client and the local benchmark (15 to 17); both
+baselines on validation (12, 13); Tanush's labels and the judge's validation (10); the scores.
+Results: `m1_corpus.md`, `m1_questions.md`, `m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
+
+### M2 Retrieval
+
+No language model, so it is cheap and exact. Experiments: chunks (the recipe's 1,000 characters,
+whole sections with an Act, chapter and heading header, clauses with their parent section, the header
+on or off); BM25 (`bm25s`, with tokens that keep section numbers such as 304B); dense embedders (BGE
+M3, MIT, dense and sparse in one model; Qwen3 Embedding 0.6B, Apache 2.0; one more chosen in M2);
+fusion (reciprocal rank fusion, weighted fusion, BGE M3's sparse vectors); rerankers over the top 50
+(BGE reranker v2 m3 and Qwen3 Reranker 0.6B, both Apache 2.0); a parser that sends explicit
+references ("s. 498A IPC", "dhara 302") straight to the section. Every result by Act, type, author
+and language, with seconds per query on the Mac's CPU and GPU. The optional held out check reads IL
+TUR's case facts (CC BY NC SA 4.0, used for evaluation only, not redistributed) to see whether the
+best retriever finds the cited IPC sections from real fact patterns. Results: `m2_retrieval.md`.
+
+### M3 Answers
+
+The answer generator returns structured JSON: claims, each with its citations and a short quote from
+the cited section, or a refusal with its reason. Experiments: oracle sections (the gold ones: what
+answering alone costs, as DocLens's true lines showed what reading alone cost), M2's best retrieval,
+and the recipe's retrieval; 3, 5, 8 and 12 sections; order by score or by Act; free text with
+citations against claims with quotes; an instruction to decline. Results: `m3_answers.md`.
+
+### M4 Agent
+
+The graph: route (explicit references, language, scope; declines early what is out of scope), plan
+(sub questions for questions that need two sections or both codes), act with tools (look up a section,
+search, map old to new, classify an offence), answer, verify (code checks every citation and quote,
+then the model checks each claim against its cited section), revise once or decline. Ablations remove
+each node and each tool; budgets cap calls and tokens. Reported: M1's metrics, calls, tokens and
+seconds per question (p50, p95), cost per 1,000 questions, which tools were called and whether they
+were the right ones, and every failure sorted by kind. Results: `m4_agent.md`.
+
+### M5 Comparison
+
+The test set, read once, for every frozen system: models from memory (the development model, the
+local models, the current flagship of three vendors), the standard recipe, M3's best pipeline, and
+the agent, with the development model, a frontier model and the two local models as its generator.
+A check reads 100 test questions with the same open weights served locally and by a host, to separate
+the model from its serving (DocLens's PaddleOCR VL lesson). Reported with intervals and the three
+declared paired comparisons, beside cost, latency, memory, privacy and licence. Results:
+`m5_compare.md`.
+
+### M6 Ship
+
+`POST /v1/ask` streams steps and the answer as Server Sent Events and ends with the citations, each a
+link; `GET /v1/sections/{act}/{number}` returns a section's text; `GET /v1/map` returns old and new
+counterparts; `GET /health`; `GET /` serves a plain HTML demo (ask, watch the steps, open every
+citation). API keys, a rate limit per key, timeouts, retries and a fallback model, an answer cache
+keyed by question, corpus version, prompt version and model, request traces in PostgreSQL. Measured:
+the test set through the service (scores as in M5, within the run spread), retrieval agreement with
+M2, latency p50, p95 and p99 and time to first token at 1, 4 and 16 concurrent users (Locust), errors,
+peak memory, cost. Where a public demo is hosted is decided here (TinyGPT's lesson: a free Hugging
+Face Space with a server was refused). Results: `m6_service.md`.
+
+## What interviews ask, and where Dhara answers it
+
+AI engineer: why RAG and not fine tuning (M1: what models know from memory, and Acts change); how
+chunk size was chosen (M2); BM25 against dense against hybrid, bi encoders against cross encoders,
+and when a reranker pays for its latency (M2); how retrieval and generation are evaluated apart (M2,
+M3's oracle); how you know the judge is right (decision 10); what hallucination is here and how it
+was cut (decisions 9, M3, M4); when an agent beats a fixed workflow (M4's ablations); how the system
+declines (M3, M4); cost and latency per question, local against API (M5); prompt injection (M6).
+
+SDE backend: the API and streaming design (M6); why PostgreSQL and not a vector database, HNSW
+against exact search (decisions 18, 19); caching and invalidation by version (M6); rate limits,
+timeouts, retries and fallbacks (M6); p95 under load and where the time goes (M6); tracing a request
+(M6); testing without real models, and CI (decision 22); reproducibility from pinned data and cached
+calls (decisions 3, 15).
+
+## Repository layout
+
+```
+src/dhara/
+  corpus.py       Acts, sections, their hierarchy and ids
+  parse.py        India Code PDFs into sections; footnotes apart
+  tables.py       the BNSS First Schedule and the old to new correspondence
+  refs.py         section references in questions ("s. 498A IPC", "dhara 302")
+  chunking.py     the recipe's chunks, sections with headers, clauses with parents
+  retrieval/      bm25, dense, fusion, rerank: exact and in process (M2)
+  llm.py          one client: providers and Ollama, cache, tokens, cost, budget
+  answer.py       structured answers, citation and quote checks (M3)
+  agent.py        the LangGraph agent and its tools (M4)
+  judge.py        the judge's binary checks
+  metrics.py      accurate, hallucinated, incomplete, citations, abstention, retrieval
+  stats.py        bootstrap over seed sections, paired comparisons (from DocLens)
+  store.py        PostgreSQL: pgvector, pg_textsearch, cache, traces (M6)
+  service.py      FastAPI: /v1/ask, /v1/sections, /v1/map, /health, the demo page
+  demo.html
+eval/             questions (validation, test and reserve), labels, their SHA256
+scripts/          get_data, check_corpus, draft_questions, check_questions, bench_llm,
+                  eval_memory, eval_recipe, eval_retrieval, eval_answers, eval_agent,
+                  label_answers, validate_judge, compare, bench_service, ci_step.sh, ci_annotate.py
+tests/            unit tests, and end to end tests with the fake model
+docs/             PLAN.md and results/
+Dockerfile, compose.yaml, .github/workflows/ci.yml, pyproject.toml, LICENSE
+data/, runs/      downloads, caches and outputs, never committed
+```
+
+Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLens, ruff and mypy.
+
+## Risks, and how each is caught
+
+* **The PDFs parse wrong** (footnotes, lettered or omitted sections, tables): section lists checked
+  against each arrangement of sections, a hand sample against India Code's section pages (decision 4).
+* **The repealed Acts' PDFs** may sit under state handles on India Code; M1 finds the central copies
+  or the same text on another government site, pinned by SHA256.
+* **Drafted questions flatter some systems:** hand written share, two drafting families, lexical
+  overlap and results by author reported (decision 7).
+* **The judge is wrong:** validated twice, code checks first (decisions 9, 10).
+* **API models change or retire:** pinned versions, the cache, a local model as a stable reference.
+* **Costs grow:** the cache, a budget cap, batch judging (about $35 to $55 in all, estimate).
+* **The Mac's limits:** 16 GB, a fanless Air that slows with heat, Ollama's silent truncation
+  (decisions 16, 17).
+* **Hand work:** about 18 hours for the questions and 6 for the judge's labels; the checking script
+  shows everything needed on one screen.
+
+## For Tanush to decide before M1
+
+1. The name: `Dhara`, or another.
+2. The API budget: about $35 to $55 over the project (estimate), or free tiers only (rate limited,
+   and Gemini's free tier uses prompts to improve Google's products), or local only (hours per run).
+3. The hand work: about 24 hours for 550 questions and 250 labels; or a smaller test set (200
+   questions, intervals about plus or minus 6.4 points instead of 5.2).
+4. The scope: the six criminal law Acts (recommended), or more Acts from the start.
+
+## Appendix A: the arithmetic behind the estimates
+
+Tokens per question, in and out (assumed; M1 measures them): from memory 700 and 300; the standard
+recipe 1,600 and 300 (four chunks); plain RAG 3,600 and 350 (eight sections); the agent 9,000 and
+900 (three or four calls). Judge: 2,500 and 250 per answer. Cost per 1,000 questions is
+1,000 × (tokens in × price in + tokens out × price out) / 1,000,000.
+
+Answers over the project: from memory 2,250 (five models, three runs each on validation; their
+test reads add cents); the recipe 750 (three candidates on validation, once on test); plain RAG 2,700 (12 settings on validation, three runs on test); the agent 3,150 (15
+settings and ablations on validation, three runs on test); 8,850 in all, about $6.42 on Claude Haiku
+5.5. Judging them all in batch: about $33 with Claude Sonnet 5.5, about $17 with GPT 6.1 Terra.
+Frontier runs: about $14.
+
+Local speed: llama.cpp on the M2 with a 7B model at 4 bits processes 146 (8 GPU cores) to 180 (10
+cores) prompt tokens a second and generates about 22 tokens a second; scaled by 7/9 for a 9B model,
+seconds per question are tokens in / prompt speed + tokens out / generation speed.
+
+Interval half widths, 1.96 × √(p(1 − p)/n): at n = 300, 5.7 points at p = 0.5 and 5.2 at 0.7; at
+n = 150, 7.3 at 0.7; at n = 200, 6.4 at 0.7. Smallest paired difference detected at α = 0.05 with
+80% power (McNemar's approximation): at n = 300, 5.1, 6.2 and 8.1 points when 10%, 15% and 25% of
+questions differ between the two systems.
+
+## Sources
+
+Data and law:
+* India Code, the BNS (PDF): <https://www.indiacode.nic.in/bitstream/123456789/20062/1/a202345.pdf>
+* India Code, disclaimer: <https://www.indiacode.nic.in/indiacode/disclaimer.jsp?abv=null>
+* PRS India, are laws covered by copyright: <https://prsindia.org/theprsblog/are-laws-covered-by-copyright>
+* Copyright Act s. 52(1)(q) text: <https://future.indiankanoon.org/doc/648494>
+* BNS to IPC correspondence and comparison summary, CAPT Bhopal: <https://www.keralaprisons.gov.in/userfiles/act-and-rules/comparison_summary_BNS_to_IPC.pdf>
+* Allahabad High Court comparative charts: <https://allahabadhighcourt.in/ILR/newlaw24_vol1.pdf>, <https://allahabadhighcourt.in/ILR/newlaw24_vol2.pdf>
+* Section counts: BNSS 531 and BSA 170 <https://www.toprankers.com/president-grants-approval-to-three-bills-replacing-outdated-british-era-criminal-laws>
+* State amendments: <https://prsindia.org/files/bills_acts/bills_states/tamil-nadu/2025/Bill2of2025TN.pdf>
+* IL TUR (licence CC BY NC SA 4.0): <https://huggingface.co/datasets/Exploration-Lab/IL-TUR>
+
+Models, prices and speed:
+* Anthropic prices: <https://platform.claude.com/docs/en/about-claude/pricing>
+* OpenAI prices: <https://developers.openai.com/api/docs/pricing>
+* Gemini prices: <https://ai.google.dev/gemini-api/docs/pricing>
+* llama.cpp on Apple silicon: <https://github.com/ggml-org/llama.cpp/discussions/4167>
+* Ollama's MLX engine: <https://ollama.com/blog/mlx>; context defaults: <https://fast.io/resources/ollama-context-length/>
+* Qwen3.5 small models: <https://artificialanalysis.ai/articles/qwen3-5-small-models>
+* BGE M3 <https://huggingface.co/BAAI/bge-m3>, BGE reranker v2 m3 <https://huggingface.co/BAAI/bge-reranker-v2-m3>, Qwen3 Reranker <https://huggingface.co/Qwen/Qwen3-Reranker-0.6B>
+
+Retrieval, agents and serving:
+* pg_textsearch: <https://www.postgresql.org/about/news/pg_textsearch-v10-3264>; pgvector: <https://www.postgresql.org/about/news/pgvector-080-released-2952/>
+* Qdrant hybrid search: <https://qdrant.tech/documentation/search-tuning/hybrid-search/>
+* Vector database licences: <https://resources.rework.com/tools/ai-data-infra/best-chroma-alternatives>
+* bm25s: <https://github.com/xhluca/bm25s>
+* LangGraph and Pydantic AI versions and licences: <https://www.developersdigest.tech/agent-frameworks/compare/pydantic-ai-vs-langgraph>
+* FastAPI Server Sent Events: <https://fastapi.tiangolo.com/ko/tutorial/server-sent-events/>
+* Docker and Ollama on a Mac: <https://www.infoq.com/news/2025/04/docker-model-runner>
+
+Evaluation:
+* Stanford, Hallucination Free? (legal research tools): <https://arxiv.org/pdf/2405.20362>
+* LegalBench RAG: <https://arxiv.org/abs/2408.10343>
+* ALCE, citation recall and precision: <https://arxiv.org/abs/2305.14627>
+* AbstentionBench: <https://arxiv.org/abs/2506.09038>
+* Judging LLM as a judge: <https://arxiv.org/abs/2306.05685>
+* Validating a judge with true positive and true negative rates: <https://skills.sh/hamelsmu/evals-skills/validate-evaluator>
+* Adding error bars to evals (Anthropic): <https://arxiv.org/abs/2411.00640>; small samples: <https://arxiv.org/abs/2503.01747>
+* RAGAS faithfulness: <https://docs.ragas.io/en/v0.2.0/concepts/metrics/available_metrics/faithfulness/>
+
+Interviews:
+* <https://pub.towardsai.net/senior-ai-interviews-dont-test-what-you-know-they-test-what-breaks-at-2am-2b949558fe6d>
+* <https://prachub.com/concepts/retrieval-augmented-generation-systems>
+* <https://prachub.com/concepts/llm-chat-applications-rag-and-ml-evaluation>
