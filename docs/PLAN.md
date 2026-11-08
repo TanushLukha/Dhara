@@ -207,12 +207,12 @@ downloaded by a script that records each file's URL, size and SHA256 in `data/MA
 on" note is read when the text is parsed); each SHA256 is committed in `src/dhara/corpus.py` once its
 file is checked, and a download with another hash is refused (decision 29); India Code's per section
 web pages as a cross check on a sample. India Code serves the three new Acts as central Acts; for the
-repealed ones it does not at present: its central pages for the IPC and the Evidence Act list no file,
-and the CrPC's central text (footnotes up to the 2019 amendments, no state amendments) is served from
-its Delhi collection. The IPC's and the Evidence Act's sources, and the three commencement
-notifications (from the eGazette), are settled in M1, each checked against a second copy on 30
-sections before it is pinned. The PDFs are not committed; the service shows a section's text beside
-its own answer.
+repealed ones it does not at present. The CrPC's and the Evidence Act's central texts (footnotes up to
+the 2019 amendments) are served from its Delhi and Chandigarh collections; for the IPC its current
+pages list no file, so the text is India Code's own central file as the Internet Archive captured it
+before the repeal. Each repealed Act's text is checked against a second copy on 30 sections before it
+is pinned; the three commencement notifications (from the eGazette) are settled in M1. The PDFs are
+not committed; the service shows a section's text beside its own answer.
 Why: India Code states that its PDFs reproduce the officially adopted text and that the English
 version prevails. Section 52(1)(q)(ii) of the Copyright Act permits reproducing an Act together with
 commentary or other original matter, which is how Dhara shows text (this is a reading of the statute
@@ -437,14 +437,19 @@ push" true from the start. Why not DocLens's default mypy settings: they let unt
 unchecked. Why not uv or Poetry: pip and setuptools as in DocLens, one toolchain across projects; the
 service's dependencies are pinned in M6, as DocLens's were.
 
-**29. The download: the standard library, retries, and pinned hashes.**
-What: `scripts/get_data.py` with Python's urllib; server errors, rate limits and timeouts are retried
-four times with a doubling wait (5 to 40 seconds), a missing file (404) is not; one failure does not
-stop the others; a file must be a PDF and, once pinned, have its pinned SHA256.
-Why: India Code is slow, and while this was built it answered with gateway timeouts (HTTP 504) for
-minutes at a time; pinning turns a silent change of text into a stop. Why not requests or httpx: no
-dependency for a handful of downloads. Why not one try: the corpus step would fail for reasons that
-pass on their own.
+**29. The download: the standard library, retries, the Archive as a fallback, pinned hashes.**
+What: `scripts/get_data.py` with Python's urllib; server errors, failed redirects, rate limits and
+timeouts are retried four times with a doubling wait (5 to 40 seconds), a missing file (404) is not;
+when India Code still fails, the same file is taken from the Internet Archive's capture of it, and the
+manifest records which route each file came by; one failure does not stop the others; a file must be
+a PDF and, once pinned, have its pinned SHA256.
+Why: India Code is slow, and while this was built it answered the Mac with gateway timeouts (HTTP 504)
+for hours while it answered other networks; the Archive returns the bytes India Code served, and a
+later download from India Code (with `--force`) is compared with the pinned hash, a changed file being
+reported rather than replaced from the Archive, so the route never changes the text. Pinning turns a
+silent change of text into a stop. Why not another copy (a commentary site, a police website): those
+are retyped or reformatted, not India Code's file. Why not requests or httpx: no dependency for a
+handful of downloads. Why not one try: the corpus step would fail for reasons that pass on their own.
 
 ## Decisions planned for later milestones (settled by measurement there)
 
