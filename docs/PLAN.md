@@ -1,14 +1,14 @@
-# Dhara plan (draft for review)
+# Dhara plan
 
 Dhara (धारा, "section" in Hindi, as in "dhara 420") answers questions about India's criminal law
 Acts and cites the sections it relies on. It is built in six measured steps, as DocLens was, and every
 step is compared with what people actually use: a large language model answering from memory, and
 the standard RAG recipe from tutorials.
 
-Status: a draft for review; nothing is built yet. Tanush's decisions (free tiers only, 550 hand
-checked questions, the six Acts) are folded in. Numbers marked "estimate" come from the sources at
-the end and the arithmetic in Appendix A; M1 replaces each of them with a measurement on the M2
-MacBook Air. Nothing here is legal advice: Dhara reports what the text of the Acts says.
+Status: agreed, and M1 has started; Tanush's decisions are listed near the end. Numbers marked
+"estimate" come from the sources at the end and the arithmetic in Appendix A; M1 replaces each of them
+with a measurement on the M2 MacBook Air. Nothing here is legal advice: Dhara reports what the text of
+the Acts says.
 
 ## What Dhara is, and why it is worth building
 
@@ -25,9 +25,9 @@ What the project shows:
 
 * **RAG done properly:** statutes parsed into sections with their hierarchy; BM25, dense, hybrid and
   reranked retrieval, each measured against the same questions.
-* **An agent that has to earn its place:** a LangGraph agent with exact lookup tools, a check of every
-  citation before it answers, and abstention when the Acts do not say; ablations show what each part
-  adds and what it costs.
+* **An agent that has to earn its place:** a LangGraph agent with exact lookup tools, a CRAG style
+  check of what retrieval found, a check of every citation before it answers, and a question back or a
+  refusal when the Acts cannot answer as asked; ablations show what each part adds and what it costs.
 * **Evaluation discipline:** a hand checked question set, a judge validated against hand labels,
   intervals and paired tests, a test set read once.
 * **Backend engineering:** FastAPI with streaming, PostgreSQL with pgvector and BM25, Docker Compose,
@@ -73,7 +73,9 @@ Together about 2,200 numbered sections, more with the lettered ones; M1 counts t
 tables come with them: the BNSS First Schedule (for each offence: punishment, cognizable or not,
 bailable or not, which court tries it) and the correspondence between old and new sections, compiled
 from tables the government has published (for example the BNS to IPC comparison summary of the
-Central Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts).
+Central Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts),
+each row typed by its change (decision 24). The Gazette notifications that brought the three new
+Acts into force join the corpus too (decision 25).
 
 ### Questions
 
@@ -92,7 +94,7 @@ Question types, for the 300 test questions (validation and reserve in the same s
 | what a section says, asked by number | 30 | false premise (a section or offence that does not exist) | 15 |
 | punishment | 40 | outside the Acts (case law, interpretation, other laws, state amendments) | 25 |
 | definition | 25 | advice or prediction ("should I", "will I win") | 10 |
-| procedure (BNSS, CrPC) | 35 | underspecified | 10 |
+| procedure (BNSS, CrPC) | 35 | missing a fact the answer turns on (Dhara should ask) | 10 |
 | evidence (BSA, IEA) | 25 | | |
 | classification (bailable, cognizable, which court) | 20 | | |
 | old to new mapping | 25 | | |
@@ -111,16 +113,18 @@ and key facts: short, checkable statements the answer must contain ("imprisonmen
 "and fine").
 
 * **Accurate** (the headline): an answerable question answered correctly and grounded, or an
-  unanswerable one declined (or its false premise corrected). The terms are adapted from Stanford's
-  legal research study: **correct** means every key fact is stated and nothing contradicts the gold
-  answer; **grounded** means each key statement cites a section that supports it.
+  unanswerable one declined (or its false premise corrected, or the missing fact asked for). The terms
+  are adapted from Stanford's legal research study: **correct** means every key fact is stated and
+  nothing contradicts the gold answer; **grounded** means each key statement cites a section that
+  supports it.
 * **Hallucinated:** an incorrect statement, or a misgrounded one: a cited section that does not exist,
   does not support the statement, or does not apply (the repealed IPC cited for an offence the BNS
   governs).
 * **Incomplete:** an answerable question declined, or answered without citations.
 * **Citation precision, recall and F1:** cited sections that are gold, over cited sections; required
   gold sections cited, over required ones.
-* **Abstention:** precision and recall of declining, over the answerable flag.
+* **Answer, ask or decline:** each answer's outcome against the question's gold outcome, as a 3 by 3
+  table, with the precision and recall of declining and of asking (decision 25).
 * **Code confusion:** the share of answers citing the old code where the new one applies, or the
   reverse. Specific to this corpus, and the failure most worth a story.
 * **Retrieval (M2):** recall at 1, 5, 10 and 20 (every required section found, and any found), MRR
@@ -152,8 +156,8 @@ been retired, and OpenRouter's free models allow 50 requests a day.
 The split (decision 14): Mistral is the development model, because only its quota holds the
 thousands of answers M3 to M6 need; Gemini 3.5 Flash Lite is the judge, from another family; Mistral
 Large and Groq's two models are the strongest free models compared; Qwen3.5 runs on the Mac. The
-whole project, estimate (Appendix A): about 12,300 generated answers and 5,500 judge calls; the
-development model's share is about 47 million tokens, under 5% of one month's quota for one model;
+whole project, estimate (Appendix A): about 12,600 generated answers and 5,600 judge calls; the
+development model's share is about 51 million tokens, about 5% of one month's quota for one model;
 the judge needs about 11 days of Gemini's daily quota, spread over the project; Groq 2 to 5 days per
 model; on the Mac, M5's runs take about 16 hours for the 9B model and 7 for the 4B, overnight. The
 client counts every limit (decision 15), so a run pauses at a limit and resumes the next day from its
@@ -223,9 +227,9 @@ exactly what the standard recipe does and what M2 measures against.
 
 **5. The two tables as data, checked by hand.**
 What: the BNSS First Schedule parsed into rows (section, offence, punishment, cognizable, bailable,
-court); the correspondence table compiled from the government published tables, many to many (one
-BNS section can replace several IPC sections). Both checked against the Acts on a random sample of 50
-rows each.
+court); the correspondence table compiled from the government published tables, many to many (one BNS
+section can replace several IPC sections), each row typed by its change (decision 24). Both checked
+against the Acts on a random sample of 50 rows each.
 Why: "is it bailable" and "what replaced IPC 420" are among the commonest questions, and both are
 lookups in a table, not semantic search; the agent gets them as tools (M4). Why not leave them to
 retrieval: a schedule row read as text loses its columns; M4 measures what the tools add.
@@ -339,7 +343,7 @@ nearly always, pinned by version for the rest of the project. Gemini 3.5 Flash L
 10). Mistral Large, and gpt oss 120b and Qwen3.8 27B on Groq, are the strongest free models compared;
 Qwen3.5 9B and 4B run through Ollama in M1 (the benchmark, and the 9B in both baselines) and in M5 on
 the test set; the service can use an API or the local model.
-Why: M3 to M6 need about 15,900 development requests and 47 million tokens (Appendix A), and only
+Why: M3 to M6 need about 17,000 development requests and 51 million tokens (Appendix A), and only
 Mistral's free plan (about a billion tokens a month per model) holds that; Gemini's 500 requests a day
 suit the judge, whose calls code keeps few; Groq's 200,000 tokens a day hold about 200 questions from
 memory or 50 with retrieval, too little to develop on. On the Mac the agent takes about 2 minutes a
@@ -383,6 +387,48 @@ GPU cores (10 on the 15 inch M2 Air, as the estimates here assume).
 Why: DocLens's first CRNN run died of memory a benchmark would have shown; on a fanless Air long runs
 can also slow with heat, so the benchmark runs long enough to show it. Ollama's MLX engine first
 needed more than 32 GB, so which engine runs here must be measured.
+
+**24. Every old to new pair typed by its change.**
+What: each correspondence row gets a type: unchanged (same text, new number), modified (wording,
+scope or punishment changed), merged (several old sections into one), split (one old section into
+several), new (no old counterpart) or omitted (no new counterpart). Where a government table
+describes the change in words, a script reads the type from them: the CAPT Bhopal BNS to IPC summary
+describes each change in a free text column and has no column for its type. Elsewhere a script
+compares the two texts and proposes a type. Tanush checks the types on decision 5's sample of 50 rows
+per table and on every row a gold answer uses. Answers about a change quote both sections and name
+the type.
+Why: "is BNS 318 the same as IPC 420" is answered by the type, and treating a modified section as
+identical is exactly the code confusion the project measures. Reading the type from the government's
+own words keeps the hand work small. Why not leave the type to the model reading both texts: that is
+one of the things M4 measures, not something to assume. Why not unchecked labels: they would leak
+into gold answers.
+
+**25. Which law applies: savings sections and notifications; a missing fact is asked for.**
+What: "which law applies" questions are answered from the repeal and savings sections (BNS 358, BNSS
+531, BSA 170) and the Gazette notifications that brought the three Acts into force, which join the
+corpus, pinned like the Acts (the BNS notification, S.O. 850(E), leaves out section 106(2)). A third
+outcome joins answering and declining: when the answer turns on a fact the question does not give
+(when the offence happened, whether a case was pending), Dhara asks for it. Questions missing such a
+fact are scored correct when Dhara asks for the fact; answer, ask and decline are reported against
+the gold outcome.
+Why: the Acts leave their start dates to the notifications, so without them "which law applies"
+cannot be answered from the sources; and a guessed date is a confident wrong answer, the failure the
+project is about. Asking is measurable: a question either names the missing fact or not. Why not
+territorial extent, state amendments, or how courts read "pending": they are outside the central
+text or are interpretation (courts have read BNSS 531's savings clause differently), so Dhara cites
+the text and declines the rest (decision 2). Why not a dialogue: one turn keeps every question
+scorable; the service returns the question, and the user asks again with the fact.
+
+**28. Tooling: Python 3.13, ruff, mypy in strict mode, pytest, CI from the first commit.**
+What: a `pyproject.toml` package in `src/dhara` as in DocLens, installed with pip into a virtual
+environment; ruff (rules E, F, W, B, UP and I, lines up to 120 characters); mypy in strict mode on
+`src/dhara`; pytest; CI (decision 22) running lint, types and tests through `scripts/ci_step.sh` on
+every push from the first commit. Dependencies are added with the code that needs them.
+Why: strict types are cheap to keep from the start and costly to add later, and they catch a wrong
+shaped citation or judge verdict before a run does; CI from the first commit keeps "green after every
+push" true from the start. Why not DocLens's default mypy settings: they let untyped functions pass
+unchecked. Why not uv or Poetry: pip and setuptools as in DocLens, one toolchain across projects; the
+service's dependencies are pinned in M6, as DocLens's were.
 
 ## Decisions planned for later milestones (settled by measurement there)
 
@@ -440,11 +486,39 @@ What: the code under MIT; the PDFs downloaded, not committed; questions and labe
 Dhara's own work; models under their own licences, listed in the README.
 Why: as DocLens. Why not commit the PDFs: they are the government's to publish.
 
+**26. The answer: plain words, quoted law, the Act's own Illustrations, limits and links.**
+What: the structured answer (M3) holds a short answer in plain words; claims, each with Act, section
+and subsection, a quote from it, and a line on why the section applies; the section's official
+Illustrations where the Act gives them, quoted; what the Acts do not settle (case law, state
+amendments); and, for each citation, links to the section's text in Dhara and to India Code's page for
+it. Every plain words statement is a claim, checked like the others.
+Why: about 40% of the questions are asked the way a layperson asks, so the answer must read plainly;
+the Acts' Illustrations (BNS 318 has them) are worked examples that are law, not text a model made
+up. Why not generated hypothetical examples: unverifiable text in an answer is the failure Dhara
+exists to prevent, and each would need judging too. Why not free text answers: claims with quotes are
+what the citation checks and the judge score.
+
+**27. Corrective retrieval, CRAG style, inside the six Acts, measured as an ablation.**
+What: a grading step after retrieval with CRAG's three outcomes: correct (answer from the sections
+graded relevant, the rest dropped); incorrect (retrieve again inside the corpus: exact lookup of
+referenced sections, a reworded query, the old to new mapping); ambiguous (add a second strategy's
+sections, and decline if the evidence is still not enough). Two graders are compared: the reranker's
+score with two thresholds set on validation (no model call, closest to CRAG's small trained
+evaluator), and one model call that grades all retrieved sections together. Measured against M3's
+best pipeline and the agent without it: retrieval recall, accuracy, citation F1, hallucination,
+latency, calls and tokens. It stays in the service only if it earns its place; either way the result
+is reported.
+Why: when retrieval misses, the answer fails however good the generator; M3's oracle gap measures how
+often that happens, and this step targets it. Why not CRAG's web search for incorrect retrievals:
+Dhara answers only from the Acts, and web text is unverified. Why not CRAG's fine tuned T5 evaluator:
+it needs training labels Dhara does not have, and the reranker is already a trained relevance model.
+
 ## The six milestones in detail
 
 ### M1 Baseline
 
-In this order: the corpus and its checks (decisions 3 to 5); the validation questions, then the test
+In this order: the repository and CI (decision 28); the corpus, the notifications and their
+checks (decisions 3 to 5, 24, 25); the validation questions, then the test
 and reserve sets, sealed (decisions 6 to 8); the free accounts with their recorded limits, the model
 client and the local benchmark (14 to 17); both baselines on validation (12, 13); Tanush's labels and
 the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_questions.md`,
@@ -465,21 +539,25 @@ best retriever finds the cited IPC sections from real fact patterns. Results: `m
 
 ### M3 Answers
 
-The answer generator returns structured JSON: claims, each with its citations and a short quote from
-the cited section, or a refusal with its reason. Experiments: oracle sections (the gold ones: what
-answering alone costs, as DocLens's true lines showed what reading alone cost), M2's best retrieval,
-and the recipe's retrieval; 3, 5, 8 and 12 sections; order by score or by Act; free text with
-citations against claims with quotes; an instruction to decline. Results: `m3_answers.md`.
+The answer generator returns structured JSON in decision 26's shape (a plain words answer; claims,
+each with its citations, a short quote and why the section applies; the Act's own Illustrations;
+limits), a question for a missing fact, or a refusal with its reason. Experiments: oracle sections
+(the gold ones: what answering alone costs, as DocLens's true lines showed what reading alone cost),
+M2's best retrieval, and the recipe's retrieval; 3, 5, 8 and 12 sections; order by score or by Act;
+free text with citations against claims with quotes; an instruction to decline. Results:
+`m3_answers.md`.
 
 ### M4 Agent
 
 The graph: route (explicit references, language, scope; declines early what is out of scope), plan
 (sub questions for questions that need two sections or both codes), act with tools (look up a section,
-search, map old to new, classify an offence), answer, verify (code checks every citation and quote,
-then the model checks each claim against its cited section), revise once or decline. Ablations remove
-each node and each tool; budgets cap calls and tokens. Reported: M1's metrics, calls, tokens and
-seconds per question (p50, p95), cost per 1,000 questions at list prices, which tools were called and
-whether they were the right ones, and every failure sorted by kind. Results: `m4_agent.md`.
+search, map old to new with the change type, classify an offence, check which law applies by date),
+grade what retrieval found and correct it (decision 27), answer, verify (code checks every citation
+and quote, then the model checks each claim against its cited section), revise once or decline.
+Ablations remove each node and each tool and compare the two graders; budgets cap calls and tokens.
+Reported: M1's metrics, calls, tokens and seconds per question (p50, p95), cost per 1,000 questions at
+list prices, which tools were called and whether they were the right ones, and every failure sorted by
+kind. Results: `m4_agent.md`.
 
 ### M5 Comparison
 
@@ -512,11 +590,12 @@ provider sees the questions (Groq states it does not train on them). Results: `m
 ## What interviews ask, and where Dhara answers it
 
 AI engineer: why RAG and not fine tuning (M1: what models know from memory, and Acts change); how
-chunk size was chosen (M2); BM25 against dense against hybrid, bi encoders against cross encoders,
-and when a reranker pays for its latency (M2); how retrieval and generation are evaluated apart (M2,
-M3's oracle); how you know the judge is right (decision 10); what hallucination is here and how it
-was cut (decisions 9, M3, M4); when an agent beats a fixed workflow (M4's ablations); how the system
-declines (M3, M4); cost and latency per question, local against API (M5); prompt injection (M6).
+chunk size was chosen (M2); BM25 against dense against hybrid, bi encoders against cross encoders, and
+when a reranker pays for its latency (M2); how retrieval and generation are evaluated apart (M2, M3's
+oracle); how you know the judge is right (decision 10); what hallucination is here and how it was cut
+(decisions 9, M3, M4); when an agent beats a fixed workflow, and whether corrective retrieval pays
+(M4's ablations, decision 27); how the system declines or asks (decision 25); cost and latency per
+question, local against API (M5); prompt injection (M6).
 
 SDE backend: the API and streaming design (M6); why PostgreSQL and not a vector database, HNSW
 against exact search (decisions 18, 19); caching and invalidation by version (M6); rate limits,
@@ -584,11 +663,13 @@ Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLen
 2. Free tiers only: nothing is paid (decision 14).
 3. 550 hand checked questions: validation 150, test 300, reserve 100 (decision 6).
 4. The six criminal law Acts (decision 1).
+5. After review: the change types, which law applies with asking, the answer's shape and corrective
+   retrieval (decisions 24 to 27).
 
-## To confirm in your review
+## Before M1's baselines run
 
-* Three free accounts before M1: Mistral (a phone check, and the Experiment plan requires opting in
-  to training on your prompts), Google AI Studio for a Gemini API key (free tier prompts may be used
+* Three free accounts: Mistral (a phone check, and the Experiment plan requires opting in to
+  training on your prompts), Google AI Studio for a Gemini API key (free tier prompts may be used
   to improve Google's products), and Groq (states it does not train on API data). Every prompt holds
   only public law text and Dhara's own questions.
 
@@ -599,13 +680,14 @@ Tokens per request, in plus out (assumed; M1 measures them): from memory 1,000; 
 a judge call 2,750.
 
 Answers over the project: M1, six models from memory and three in the recipe on 150 validation
-questions; M3, 12 settings; M4, 15 settings and ablations; M5, the test set for every system listed
-there, each system on the development model three times; M6, the test set once more through the
-service: about 12,300 answers. If code scores 60% of them alone (estimate), the judge makes about
-4,900 calls, and about 600 more while its prompt is tuned and validated: 5,500 calls, 15 million
+questions; M3, 12 settings; M4, 15 settings and ablations, and corrective retrieval with each of
+its two graders (the model grader adds about one call a question); M5, the test set for every system
+listed there, each system on the development model three times; M6, the test set once more through
+the service: about 12,600 answers. If code scores 60% of them alone (estimate), the judge makes about
+5,000 calls, and about 600 more while its prompt is tuned and validated: 5,600 calls, 15.5 million
 tokens, 11 days of Gemini's 500 requests a day. Drafting: about 600 drafts, half per family, two a
-call at 3,700 tokens. The development model in M3 to M6: about 15,900 requests and 47 million tokens;
-all Mistral models together about 18,100 requests, 5 hours at one request a second (151 hours if the
+call at 3,700 tokens. The development model in M3 to M6: about 17,000 requests and 51 million tokens;
+all Mistral models together about 19,200 requests, 5.3 hours at one request a second (160 hours if the
 limit were 2 requests a minute, as one guide states). Groq: gpt oss 120b 600 requests and 1.0 million
 tokens with its drafts, 5 days at 200,000 tokens a day; Qwen3.8 27B 450 requests and 0.45 million
 tokens, 2.2 days. On the Mac (the 15 inch M2 Air has 10 GPU cores; estimate): the 300 test questions
@@ -670,6 +752,12 @@ Evaluation:
 * Validating a judge with true positive and true negative rates: <https://skills.sh/hamelsmu/evals-skills/validate-evaluator>
 * Adding error bars to evals (Anthropic): <https://arxiv.org/abs/2411.00640>; small samples: <https://arxiv.org/abs/2503.01747>
 * RAGAS faithfulness: <https://docs.ragas.io/en/v0.2.0/concepts/metrics/available_metrics/faithfulness/>
+
+Transition and corrective retrieval:
+* CRAG, Corrective Retrieval Augmented Generation: <https://arxiv.org/abs/2401.15884>
+* The BNS commencement notification, S.O. 850(E), leaving out section 106(2): <https://taxmanagementindia.com/visitor/detail_notification.asp?ID=141616>
+* BSA section 170, repeal and savings: <https://future.indiankanoon.org/doc/10673658/>
+* BNSS section 531(2)(a), pending matters: <https://www.scconline.com/blog/?p=329232>; read differently by courts: <https://amsshardul.com/?p=15622>
 
 Interviews:
 * <https://pub.towardsai.net/senior-ai-interviews-dont-test-what-you-know-they-test-what-breaks-at-2am-2b949558fe6d>
