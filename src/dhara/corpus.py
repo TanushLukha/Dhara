@@ -76,6 +76,8 @@ SOURCES: tuple[Source, ...] = (
         "bnss",
         "https://indiacode.nic.in/bitstream/123456789/20099/3/a2023-46.pdf",
         "India Code, the central Act",
+        # the Archive holds the same India Code file (item 20099, file 3) under another name in its URL
+        archived("20250318103613", f"{INDIA_CODE}/20099/3/aa2023-46.pdf"),
     ),
     Source(
         "bsa",

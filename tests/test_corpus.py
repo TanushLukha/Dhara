@@ -53,8 +53,10 @@ def test_every_act_and_source_is_consistent() -> None:
             assert len(source.sha256) == 64 and set(source.sha256) <= set("0123456789abcdef")
         if source.mirror is not None:
             assert source.mirror.startswith(ARCHIVE + "/")
-            assert "id_/" in source.mirror
-            assert source.mirror.lower().endswith(source.url.lower())
+            original = urlparse(source.mirror.split("id_/", 1)[1])
+            assert original.hostname in {"www.indiacode.nic.in", "indiacode.nic.in"}
+            # the same India Code item and file number; the name after it may be spelled differently
+            assert original.path.rsplit("/", 1)[0].lower() == url.path.rsplit("/", 1)[0].lower()
 
 
 def test_server_errors_are_retried_with_a_doubling_wait() -> None:
