@@ -58,8 +58,10 @@ def archived(timestamp: str, url: str) -> str:
 
 # Each India Code file was opened and its first pages read before it was listed, except the IPC's:
 # India Code's current pages for the IPC list no file, and the Internet Archive holds the file India Code
-# served before the repeal. Every capture below was listed by the Archive with status 200. The
-# commencement notifications join once their sources are settled (decision 3).
+# served before the repeal. Every capture below was listed by the Archive with status 200. A hash is
+# pinned once its downloaded file was read: title, as on note, and the last section present in both the
+# arrangement and the body. The commencement notifications join once their sources are settled
+# (decision 3).
 SOURCES: tuple[Source, ...] = (
     Source(
         "bns",
@@ -67,6 +69,7 @@ SOURCES: tuple[Source, ...] = (
         f"{INDIA_CODE}/20062/1/a202345.pdf",
         "India Code, the central Act",
         archived("20260212071046", f"{INDIA_CODE}/20062/1/a202345.pdf"),
+        sha256="ff92dcc72778944011807644b6033b1140ddbe6d7e9f82ac32fd419dae03aa86",
     ),
     Source(
         "bnss",
@@ -80,6 +83,7 @@ SOURCES: tuple[Source, ...] = (
         f"{INDIA_CODE}/20063/1/aa202347.pdf",
         "India Code, the central Act",
         archived("20260604191823", f"{INDIA_CODE}/20063/1/aa202347.pdf"),
+        sha256="993882ad0ae7ded6ae8087351edd61caeb6faa1a2d6c8fff8c269a9cf149b9ac",
     ),
     Source(
         "ipc",
@@ -87,6 +91,7 @@ SOURCES: tuple[Source, ...] = (
         f"{INDIA_CODE}/2263/1/A1860-45.pdf",
         "India Code, the central Act as served before the repeal",
         archived("20230501052500", f"{INDIA_CODE}/2263/1/A1860-45.pdf"),
+        sha256="2bbc5b1a7b9567a1811fc376b0cec037f8fe7b90a680d8177abc6b06364fc76a",
     ),
     Source(
         "crpc",
@@ -94,6 +99,7 @@ SOURCES: tuple[Source, ...] = (
         f"{INDIA_CODE}/13624/1/the_code_of_criminal_procedure%2c_1973.pdf",
         "India Code, Delhi collection, which carries the central text as last amended",
         archived("20251206113418", f"{INDIA_CODE}/13624/1/the_code_of_criminal_procedure%2C_1973.pdf"),
+        sha256="2f28d487c18d33f65195d7ab99cb5dc8fd4dcf232c7deb18dee7f8fa289891b9",
     ),
     Source(
         "iea",
@@ -101,6 +107,7 @@ SOURCES: tuple[Source, ...] = (
         f"{INDIA_CODE}/15351/1/iea_1872.pdf",
         "India Code, Chandigarh collection, which carries the central text as last amended",
         archived("20250928231439", f"{INDIA_CODE}/15351/1/iea_1872.pdf"),
+        sha256="62b33659545e001223a99364447e9314d5372f1791db5cccadd87a08c267eb91",
     ),
 )
 

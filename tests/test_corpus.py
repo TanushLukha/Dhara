@@ -49,6 +49,8 @@ def test_every_act_and_source_is_consistent() -> None:
         assert url.scheme == "https"
         assert url.hostname in {"www.indiacode.nic.in", "indiacode.nic.in"}
         assert url.path.endswith(".pdf")
+        if source.sha256 is not None:
+            assert len(source.sha256) == 64 and set(source.sha256) <= set("0123456789abcdef")
         if source.mirror is not None:
             assert source.mirror.startswith(ARCHIVE + "/")
             assert "id_/" in source.mirror

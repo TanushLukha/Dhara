@@ -210,9 +210,10 @@ web pages as a cross check on a sample. India Code serves the three new Acts as 
 repealed ones it does not at present. The CrPC's and the Evidence Act's central texts (footnotes up to
 the 2019 amendments) are served from its Delhi and Chandigarh collections; for the IPC its current
 pages list no file, so the text is India Code's own central file as the Internet Archive captured it
-before the repeal. Each repealed Act's text is checked against a second copy on 30 sections before it
-is pinned; the three commencement notifications (from the eGazette) are settled in M1. The PDFs are
-not committed; the service shows a section's text beside its own answer.
+before the repeal. A file's hash is pinned once its title, as on note and last section are read; each
+repealed Act's text is also checked against a second copy on 30 sections when it is parsed; the three
+commencement notifications (from the eGazette) are settled in M1. The PDFs are not committed; the
+service shows a section's text beside its own answer.
 Why: India Code states that its PDFs reproduce the officially adopted text and that the English
 version prevails. Section 52(1)(q)(ii) of the Copyright Act permits reproducing an Act together with
 commentary or other original matter, which is how Dhara shows text (this is a reading of the statute
