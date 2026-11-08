@@ -1,0 +1,15 @@
+# environments
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+
+# API keys live in .env, never committed; .env.example lists them
+.env
+
+# downloads, caches and outputs, made again by the scripts
+data/
+runs/
