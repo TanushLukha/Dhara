@@ -72,10 +72,9 @@ M<n+1>", and is done only when lint, type checks and every test pass locally and
 Together about 2,200 numbered sections, more with the lettered ones; M1 counts them exactly. Two
 tables come with them: the BNSS First Schedule (for each offence: punishment, cognizable or not,
 bailable or not, which court tries it) and the correspondence between old and new sections, compiled
-from tables the government has published (for example the BNS to IPC comparison summary of the Central
-Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts), each row
-typed by its change (decision 24). The commencement notifications, as India Code's footnotes record
-them, join the corpus too (decision 25).
+from the correspondence tables the Central Academy for Police Training, Bhopal (CAPT) has published,
+one for each pair of Acts, each row typed by its change (decision 24). The commencement notifications,
+as India Code's footnotes record them, join the corpus too (decision 25).
 
 ### Questions
 
@@ -235,12 +234,28 @@ exactly what the standard recipe does and what M2 measures against.
 
 **5. The two tables as data, checked by hand.**
 What: the BNSS First Schedule parsed into rows (section, offence, punishment, cognizable, bailable,
-court); the correspondence table compiled from the government published tables, many to many (one BNS
-section can replace several IPC sections), each row typed by its change (decision 24). Both checked
-against the Acts on a random sample of 50 rows each.
+court); the correspondence table compiled from CAPT Bhopal's three tables (BNS to IPC, BNSS to CrPC,
+BSA to IEA: one author and one layout for all three), many to many (one BNS section can replace
+several IPC sections), each row typed by its change (decision 24). Both checked against the Acts on a
+random sample of 50 rows each, drawn with a fixed seed into a sheet under `docs/checks/` that Tanush
+fills and the script counts. The schedule is read from the BNSS file itself: each page's column edges
+come from the rules across the top of its table, every character goes to the column its middle falls
+in (some cells are letter spaced, and a word would otherwise run from one column into the next), and a
+row starts where the offence and at least two other columns begin in capitals at the same height.
+Checks, in `m1_tables.md`: every row names a BNS section, the rows follow the BNS in order, every
+value falls in a class (cognizable or not, bailable or not, which court, or one that depends on
+another offence), and every term of punishment a row states (7 years, life) appears in the words of
+its BNS section; the BNS sections that punish but have no row are listed (India Code's schedule has
+none for section 307).
 Why: "is it bailable" and "what replaced IPC 420" are among the commonest questions, and both are
-lookups in a table, not semantic search; the agent gets them as tools (M4). Why not leave them to
-retrieval: a schedule row read as text loses its columns; M4 measures what the tools add.
+lookups in a table, not semantic search; the agent gets them as tools (M4). The schedule comes from
+the pinned BNSS file rather than a copy on another site, so its rows are the law's own; CAPT's tables
+come from a government police academy, cover all three pairs in one layout, and describe each change
+in words, which decision 24 reads. The punishment check ties each row to the words of its section, so
+a number put on the wrong row shows. Why not leave the tables to retrieval: a schedule row read as
+text loses its columns; M4 measures what the tools add. Why not pdfplumber's own table finder: the
+table is ruled only across its header, and the finder found no table on its pages. Why not the
+comparison tables on lawyers' sites: they are unofficial, and nothing pins them.
 
 ## Decisions in M1
 
@@ -397,14 +412,13 @@ can also slow with heat, so the benchmark runs long enough to show it. Ollama's 
 needed more than 32 GB, so which engine runs here must be measured.
 
 **24. Every old to new pair typed by its change.**
-What: each correspondence row gets a type: unchanged (same text, new number), modified (wording,
-scope or punishment changed), merged (several old sections into one), split (one old section into
-several), new (no old counterpart) or omitted (no new counterpart). Where a government table
-describes the change in words, a script reads the type from them: the CAPT Bhopal BNS to IPC summary
-describes each change in a free text column and has no column for its type. Elsewhere a script
-compares the two texts and proposes a type. Tanush checks the types on decision 5's sample of 50 rows
-per table and on every row a gold answer uses. Answers about a change quote both sections and name
-the type.
+What: each correspondence row gets a type: unchanged (same text, new number), modified (wording, scope
+or punishment changed), merged (several old sections into one), split (one old section into several),
+new (no old counterpart) or omitted (no new counterpart). Where a government table describes the
+change in words, a script reads the type from them: CAPT Bhopal's tables describe each change in a
+free text column and have no column for its type. Elsewhere a script compares the two texts and
+proposes a type. Tanush checks the types on decision 5's sample of 50 rows per table and on every row
+a gold answer uses. Answers about a change quote both sections and name the type.
 Why: "is BNS 318 the same as IPC 420" is answered by the type, and treating a modified section as
 identical is exactly the code confusion the project measures. Reading the type from the government's
 own words keeps the hand work small. Why not leave the type to the model reading both texts: that is
@@ -584,7 +598,7 @@ In this order: the repository and CI (decision 28); the corpus, the notification
 checks (decisions 3 to 5, 24, 25, 29, 30); the validation questions, then the test
 and reserve sets, sealed (decisions 6 to 8); the free accounts with their recorded limits, the model
 client and the local benchmark (14 to 17); both baselines on validation (12, 13); Tanush's labels and
-the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_questions.md`,
+the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_tables.md`, `m1_questions.md`,
 `m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
 
 ### M2 Retrieval
@@ -670,7 +684,7 @@ calls (decisions 3, 15).
 
 ```
 src/dhara/
-  corpus.py       Acts, sections, their hierarchy and ids
+    corpus.py       the Acts and the tables: where each file comes from, pinned
   parse.py        India Code PDFs into sections; footnotes apart
   tables.py       the BNSS First Schedule and the old to new correspondence
   refs.py         section references in questions ("s. 498A IPC", "dhara 302")
@@ -686,11 +700,11 @@ src/dhara/
   service.py      FastAPI: /v1/ask, /v1/sections, /v1/map, /health, the demo page
   demo.html
 eval/             questions (validation, test and reserve), labels, their SHA256
-scripts/          get_data, check_corpus, draft_questions, check_questions, bench_llm,
+scripts/          get_data, parse_corpus, make_tables, draft_questions, check_questions, bench_llm,
                   eval_memory, eval_recipe, eval_retrieval, eval_answers, eval_agent,
                   label_answers, validate_judge, compare, bench_service, ci_step.sh, ci_annotate.py
 tests/            unit tests, and end to end tests with the fake model
-docs/             PLAN.md and results/
+docs/             PLAN.md, results/, and checks/ (the sheets Tanush fills by hand)
 Dockerfile, compose.yaml, .github/workflows/ci.yml, pyproject.toml, LICENSE
 data/, runs/      downloads, caches and outputs, never committed
 .env.example      the API keys Dhara reads; the real .env is never committed
@@ -775,7 +789,10 @@ Data and law:
 * India Code, disclaimer: <https://www.indiacode.nic.in/indiacode/disclaimer.jsp?abv=null>
 * PRS India, are laws covered by copyright: <https://prsindia.org/theprsblog/are-laws-covered-by-copyright>
 * Copyright Act s. 52(1)(q) text: <https://future.indiankanoon.org/doc/648494>
-* BNS to IPC correspondence and comparison summary, CAPT Bhopal: <https://www.keralaprisons.gov.in/userfiles/act-and-rules/comparison_summary_BNS_to_IPC.pdf>
+* Correspondence tables and comparison summaries, CAPT Bhopal: BNS to IPC
+  <https://www.keralaprisons.gov.in/userfiles/act-and-rules/comparison_summary_BNS_to_IPC.pdf>, BNSS to
+  CrPC <https://keralaprisons.gov.in/userfiles/act-and-rules/comparison_summary_BNSS_to_CrPC.pdf>, BSA
+  to IEA <https://keralaprisons.gov.in/userfiles/act-and-rules/comparison_summary_BSA_to_IEA.pdf>
 * Allahabad High Court comparative charts: <https://allahabadhighcourt.in/ILR/newlaw24_vol1.pdf>, <https://allahabadhighcourt.in/ILR/newlaw24_vol2.pdf>
 * Section counts: BNSS 531 and BSA 170 <https://www.toprankers.com/president-grants-approval-to-three-bills-replacing-outdated-british-era-criminal-laws>
 * State amendments: <https://prsindia.org/files/bills_acts/bills_states/tamil-nadu/2025/Bill2of2025TN.pdf>

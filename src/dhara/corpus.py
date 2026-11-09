@@ -1,4 +1,4 @@
-"""The six Acts, and where each text is downloaded from.
+"""The six Acts and the old to new correspondence tables, and where each file is downloaded from.
 
 Every source is pinned (decision 3): once a downloaded file has been checked, its SHA256 is written
 here, and a later download with a different hash is refused, so every number names the exact text it
@@ -41,8 +41,8 @@ ACT = {act.key: act for act in ACTS}
 @dataclass(frozen=True)
 class Source:
     key: str  # the file's name in data/raw, without .pdf
-    act: str  # the Act whose text this is
-    url: str  # India Code's file
+    act: str  # the Act whose text this is; for a correspondence table, the new Act it starts from
+    url: str  # where the file is served: India Code's file for an Act
     origin: str  # where the file sits, in words
     mirror: str | None = None  # the Internet Archive's copy of the same file, used when url fails
     sha256: str | None = None  # pinned once the downloaded file has been checked
@@ -112,6 +112,16 @@ SOURCES: tuple[Source, ...] = (
         archived("20250928231439", f"{INDIA_CODE}/15351/1/iea_1872.pdf"),
         sha256="62b33659545e001223a99364447e9314d5372f1791db5cccadd87a08c267eb91",
     ),
+)
+
+# The correspondence tables (decisions 5 and 24): CAPT Bhopal's table and comparison summary for each pair
+# of Acts, one author and one layout for all three, as the Kerala Prisons department serves them. Each
+# was opened and its first rows read before it was listed; hashes are pinned once the files are read.
+CAPT = "https://keralaprisons.gov.in/userfiles/act-and-rules"
+TABLES: tuple[Source, ...] = (
+    Source("bns_ipc_table", "bns", f"{CAPT}/comparison_summary_BNS_to_IPC.pdf", "CAPT Bhopal, BNS to IPC"),
+    Source("bnss_crpc_table", "bnss", f"{CAPT}/comparison_summary_BNSS_to_CrPC.pdf", "CAPT Bhopal, BNSS to CrPC"),
+    Source("bsa_iea_table", "bsa", f"{CAPT}/comparison_summary_BSA_to_IEA.pdf", "CAPT Bhopal, BSA to IEA"),
 )
 
 USER_AGENT = "dhara/0.1 (downloads the Acts once, for research)"

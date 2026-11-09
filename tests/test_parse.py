@@ -5,10 +5,10 @@ from dhara.parse import (
     Footnote,
     Line,
     _breaks,
-    _join,
     footnotes_of,
     groups_that_differ,
     heading_agrees,
+    join_lines,
     note_of,
     numbering_gaps,
     parse_arrangement,
@@ -128,8 +128,8 @@ def test_the_note_that_dates_the_text_is_found() -> None:
 
 
 def test_lines_broken_at_a_hyphen_are_joined_without_a_space() -> None:
-    assert _join(["house-", "trespass is an offence"]) == "house-trespass is an offence"
-    assert _join(["one", "two"]) == "one two"
+    assert join_lines(["house-", "trespass is an offence"]) == "house-trespass is an offence"
+    assert join_lines(["one", "two"]) == "one two"
 
 
 def test_a_small_act_is_cut_into_sections_checked_against_its_arrangement() -> None:

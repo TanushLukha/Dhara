@@ -7,7 +7,20 @@ from urllib.parse import urlparse
 
 import pytest
 
-from dhara.corpus import ACT, ACTS, ARCHIVE, SOURCES, Source, SourceError, check, describe, download, fetch, sha256
+from dhara.corpus import (
+    ACT,
+    ACTS,
+    ARCHIVE,
+    SOURCES,
+    TABLES,
+    Source,
+    SourceError,
+    check,
+    describe,
+    download,
+    fetch,
+    sha256,
+)
 
 PDF = b"%PDF-1.7\n a tiny stand in for an Act\n%%EOF\n"
 
@@ -57,6 +70,18 @@ def test_every_act_and_source_is_consistent() -> None:
             assert original.hostname in {"www.indiacode.nic.in", "indiacode.nic.in"}
             # the same India Code item and file number; the name after it may be spelled differently
             assert original.path.rsplit("/", 1)[0].lower() == url.path.rsplit("/", 1)[0].lower()
+
+
+def test_every_correspondence_table_is_consistent() -> None:
+    keys = [source.key for source in SOURCES + TABLES]
+    assert len(keys) == len(set(keys))
+    assert sorted(source.act for source in TABLES) == sorted(act.key for act in ACTS if act.replaced_by is None)
+    for source in TABLES:
+        url = urlparse(source.url)
+        assert url.scheme == "https" and url.path.endswith(".pdf")
+        assert source.act.upper() in url.path.upper()
+        if source.sha256 is not None:
+            assert len(source.sha256) == 64 and set(source.sha256) <= set("0123456789abcdef")
 
 
 def test_server_errors_are_retried_with_a_doubling_wait() -> None:

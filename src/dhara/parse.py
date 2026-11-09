@@ -265,7 +265,7 @@ def parse_arrangement(lines: Sequence[Line]) -> list[Entry]:
             close_entry()
             close_title()
             if group_lines:
-                group, group_lines = _bare_group(_join(group_lines)), []
+                group, group_lines = _bare_group(join_lines(group_lines)), []
             number, heading = _number(numbered[1]), [numbered[2]]
             continue
         a_title_line = title_of is not None and capitals and not LETTERED.match(text)
@@ -365,10 +365,11 @@ def _paragraphs(lines: Sequence[Line], spacing: dict[int, float] | None = None) 
             paragraphs.append([line.text])
         else:
             paragraphs[-1].append(line.text)
-    return [_join(parts) for parts in paragraphs]
+    return [join_lines(parts) for parts in paragraphs]
 
 
-def _join(parts: Sequence[str]) -> str:
+def join_lines(parts: Sequence[str]) -> str:
+    """Lines of one paragraph or table cell as one string; a word broken at a hyphen is joined again."""
     text = ""
     for part in parts:
         if text.endswith("-") and part[:1].islower():
@@ -431,7 +432,7 @@ def _group_of(headings: Sequence[Line]) -> str | None:
         else:
             after_chapter = False
             group.append(line.text)
-    return _bare_group(_join(group)) or None
+    return _bare_group(join_lines(group)) or None
 
 
 def _bare_group(text: str) -> str:
