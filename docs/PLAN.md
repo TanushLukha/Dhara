@@ -72,10 +72,10 @@ M<n+1>", and is done only when lint, type checks and every test pass locally and
 Together about 2,200 numbered sections, more with the lettered ones; M1 counts them exactly. Two
 tables come with them: the BNSS First Schedule (for each offence: punishment, cognizable or not,
 bailable or not, which court tries it) and the correspondence between old and new sections, compiled
-from tables the government has published (for example the BNS to IPC comparison summary of the
-Central Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts),
-each row typed by its change (decision 24). The Gazette notifications that brought the three new
-Acts into force join the corpus too (decision 25).
+from tables the government has published (for example the BNS to IPC comparison summary of the Central
+Academy for Police Training, Bhopal, and the Allahabad High Court's comparative charts), each row
+typed by its change (decision 24). The commencement notifications, as India Code's footnotes record
+them, join the corpus too (decision 25).
 
 ### Questions
 
@@ -211,9 +211,9 @@ repealed ones it does not at present. The CrPC's and the Evidence Act's central 
 the 2019 amendments) are served from its Delhi and Chandigarh collections; for the IPC its current
 pages list no file, so the text is India Code's own central file as the Internet Archive captured it
 before the repeal. A file's hash is pinned once its title, as on note and last section are read; each
-repealed Act's text is also checked against a second copy on 30 sections when it is parsed; the three
-commencement notifications (from the eGazette) are settled in M1. The PDFs are not committed; the
-service shows a section's text beside its own answer.
+repealed Act's text is also checked against a second copy on 30 sections when it is parsed; the
+commencement facts are those India Code's footnote to section 1 of each new Act records (decision 25).
+The PDFs are not committed; the service shows a section's text beside its own answer.
 Why: India Code states that its PDFs reproduce the officially adopted text and that the English
 version prevails. Section 52(1)(q)(ii) of the Copyright Act permits reproducing an Act together with
 commentary or other original matter, which is how Dhara shows text (this is a reading of the statute
@@ -413,12 +413,14 @@ into gold answers.
 
 **25. Which law applies: savings sections and notifications; a missing fact is asked for.**
 What: "which law applies" questions are answered from the repeal and savings sections (BNS 358, BNSS
-531, BSA 170) and the Gazette notifications that brought the three Acts into force, which join the
-corpus, pinned like the Acts (the BNS notification, S.O. 850(E), leaves out section 106(2)). A third
-outcome joins answering and declining: when the answer turns on a fact the question does not give
-(when the offence happened, whether a case was pending), Dhara asks for it. Questions missing such a
-fact are scored correct when Dhara asks for the fact; answer, ask and decline are reported against
-the gold outcome.
+531, BSA 170) and the notifications that brought the three Acts into force, as India Code's footnote
+to section 1 of each new Act records them: S.O. 850(E) for the BNS, leaving out section 106(2); S.O.
+848(E) for the BNSS, leaving out its First Schedule's entry for that section; S.O. 849(E) for the BSA
+(`m1_corpus.md`). The eGazette's own copies are a cross check when it can be reached. A third outcome
+joins answering and declining: when the answer turns on a fact the question does not give (when the
+offence happened, whether a case was pending), Dhara asks for it. Questions missing such a fact are
+scored correct when Dhara asks for the fact; answer, ask and decline are reported against the gold
+outcome.
 Why: the Acts leave their start dates to the notifications, so without them "which law applies"
 cannot be answered from the sources; and a guessed date is a confident wrong answer, the failure the
 project is about. Asking is measurable: a question either names the missing fact or not. Why not
@@ -451,6 +453,45 @@ reported rather than replaced from the Archive, so the route never changes the t
 silent change of text into a stop. Why not another copy (a commentary site, a police website): those
 are retyped or reformatted, not India Code's file. Why not requests or httpx: no dependency for a
 handful of downloads. Why not one try: the corpus step would fail for reasons that pass on their own.
+
+**30. The parser: the arrangement as the list of sections, the page's marks as the cuts.**
+What: each PDF's arrangement of sections is read first and taken as the list of sections, with their
+part, chapter and group (the headings such as "Of theft" that group sections inside a chapter); the
+body is cut where those sections begin, in their order, and only at lines that look like a section
+start: a bold number, a number followed by a heading and a dash, or a repeal note. The body ends at
+the first schedule, or at the statement of objects and reasons printed after the BNS. Numbers India
+Code prints with a hyphen before the letter I, so that they are not read as figures, are keyed without
+it (171I, like 171A). Footnotes are what lies below the two inch rule at the foot of a page; their
+markers are the small raised digits. The state amendments India Code prints after some IPC and
+Evidence Act sections are cut out of the section and kept beside it. Group headings are centred and
+inset from both margins, and are cut from the end of the section before them. A paragraph breaks where
+the gap between lines is wider than the page's own line spacing allows; a line that opens with a
+clause marker ("(a)", "Explanation", "Provided") breaks on a smaller gap or an indent, so subsections
+and clauses stay apart while a cross reference broken over a line ("clause", then "(b) of section 3")
+does not. Checks, in `m1_corpus.md`: every listed section is found in the body; the arrangement's
+numbering has no gaps (every whole number up to the last, every single letter up to the last for a
+number); the group headings cut from the body agree with the arrangement's; lines that looked like a
+section start but were not used are listed (state insertions such as the IPC's 379A "Snatching", cross
+references broken over a line); headings that differ from the arrangement are listed, and each one,
+read against the file, is India Code's own: a slip in one of the two places ("miscarraige",
+"Liablility"), a spelling ("organizing"), or an entry that also names a heading inside the section;
+and two counts show how the paragraph breaks follow the page: how often a line that opens with a
+clause marker starts a paragraph, and how often a line that opens in lower case does.
+Why: the arrangement is India Code's own list of an Act's sections, so it is the authority on what
+exists, and cutting only at lines that look like a start keeps a cross reference that breaks over a
+line from becoming a section. Type sizes differ between files (the CrPC's text is 10 point, the IPC's
+arrangement 9 point, the Evidence Act's footnotes 10 point), while the footnote rule is the same in
+all six, and so is the way group headings are set. The numbering check exists because the first check
+can agree with itself: a first version missed the sections India Code numbers with a hyphen (171I in
+the IPC, 105I and 265I in the CrPC) in both the list and the body, and still reported every listed
+section found. The group headings and the statement of objects were found the same way, by reading
+what the first version produced: BNS 302 ended in "Of theft", and section 358 carried the statement of
+objects. Why not cut at every numbered line: cross references and state insertions would become
+sections. Why not keep state amendments in the text: Dhara answers on the central Acts (decision 2),
+and a state's punishment read as central law is a wrong answer. Why not a single gap for every
+paragraph: a section's own lines are too few to measure its spacing, and the gap alone joins clauses
+set in small type to the line above. Why not a layout model or OCR: the PDFs carry their text, fonts
+and positions, which pdfplumber reads exactly.
 
 ## Decisions planned for later milestones (settled by measurement there)
 
@@ -540,7 +581,7 @@ it needs training labels Dhara does not have, and the reranker is already a trai
 ### M1 Baseline
 
 In this order: the repository and CI (decision 28); the corpus, the notifications and their
-checks (decisions 3 to 5, 24, 25, 29); the validation questions, then the test
+checks (decisions 3 to 5, 24, 25, 29, 30); the validation questions, then the test
 and reserve sets, sealed (decisions 6 to 8); the free accounts with their recorded limits, the model
 client and the local benchmark (14 to 17); both baselines on validation (12, 13); Tanush's labels and
 the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_questions.md`,

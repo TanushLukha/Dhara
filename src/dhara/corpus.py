@@ -78,6 +78,7 @@ SOURCES: tuple[Source, ...] = (
         "India Code, the central Act",
         # the Archive holds the same India Code file (item 20099, file 3) under another name in its URL
         archived("20250318103613", f"{INDIA_CODE}/20099/3/aa2023-46.pdf"),
+        sha256="8047fe1de6092e23240d059b45cab8d4d93a1b77fa5de7f91ec12ac662c56512",
     ),
     Source(
         "bsa",
