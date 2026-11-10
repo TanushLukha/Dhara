@@ -142,25 +142,28 @@ and free API models called from the Mac.
 
 The free tiers checked for this plan (each console shows an account's exact limits; M1 records them):
 
-| Provider and plan | Models used | Limits per model | May train on prompts |
+| Provider and plan | Models used | Limits | May use prompts |
 |---|---|---|---|
-| Mistral, Experiment plan (phone check, no card) | Mistral Small, Medium and Large | about 1 request a second, 500,000 tokens a minute, 1 billion tokens a month | yes: the plan requires opting in |
-| Gemini API, free tier | Gemini 3.5 Flash Lite | 10 requests and 250,000 tokens a minute, 500 requests a day | yes, on the free tier |
-| Groq, free plan | gpt oss 120b, Qwen3.8 27B | 30 requests and 8,000 tokens a minute, 1,000 requests and 200,000 tokens a day | no |
+| NVIDIA's API catalog, free to members of the NVIDIA Developer Program (no card) | Mistral Small 4 and Mistral Large 3, Mistral's open weights | about 40 requests a minute for the account; no daily or token cap published | yes: its trial terms let NVIDIA improve its products with them |
+| Gemini API, free tier | Gemini 3.5 Flash Lite | per model: 10 requests and 250,000 tokens a minute, 500 requests a day | yes, on the free tier |
+| Groq, free plan | gpt oss 120b, Qwen3.8 27B (a preview model) | per model: 30 requests and 8,000 tokens a minute, 1,000 requests and 200,000 tokens a day | no |
 | Ollama on the Mac | Qwen3.5 9B and 4B | none; time is the limit | nothing leaves the Mac |
 
-Left out: Cerebras ended its open free tier (now a credit trial that needs a card), GitHub Models has
-been retired, and OpenRouter's free models allow 50 requests a day.
+Left out: Mistral's own API, whose Free mode no longer includes API access and whose consumer terms
+limit the API to business customers (decision 14); Cerebras ended its open free tier (now a credit
+trial that needs a card), GitHub Models has been retired, and OpenRouter's free models allow 50
+requests a day.
 
-The split (decision 14): Mistral is the development model, because only its quota holds the
-thousands of answers M3 to M6 need; Gemini 3.5 Flash Lite is the judge, from another family; Mistral
-Large and Groq's two models are the strongest free models compared; Qwen3.5 runs on the Mac. The
-whole project, estimate (Appendix A): about 12,600 generated answers and 5,600 judge calls; the
-development model's share is about 51 million tokens, about 5% of one month's quota for one model;
-the judge needs about 11 days of Gemini's daily quota, spread over the project; Groq 2 to 5 days per
-model; on the Mac, M5's runs take about 16 hours for the 9B model and 7 for the 4B, overnight. The
-client counts every limit (decision 15), so a run pauses at a limit and resumes the next day from its
-cache.
+The split (decision 14): NVIDIA's free endpoints carry the development model, because only they hold
+the thousands of answers M3 to M6 need; Gemini 3.5 Flash Lite is the judge, from another family; the
+Mistral model M1 does not keep and Groq's two models are the strongest free models compared; Qwen3.5
+runs on the Mac. The whole project, estimate (Appendix A): about 12,500 generated answers and 5,600
+judge calls; the development model's share is about 17,000 requests and 51 million tokens, which 40
+requests a minute let through in about 7 hours of calls (longer if each call is slower, since the
+client sends one at a time; M1 measures seconds per call); the judge needs about 11 days of Gemini's
+daily quota, spread over the project; Groq 2 to 5 days per model; on the Mac, M5's runs take about 16
+hours for the 9B model and 7 for the 4B, overnight. The client counts every limit (decision 15), so a
+run pauses at a limit and resumes the next day from its cache.
 
 On the Mac, estimate: llama.cpp's published M2 numbers for a 7B model at 4 bits (prompt about 180
 tokens a second on 10 GPU cores, as in the 15 inch M2 Air; generation about 22) scaled to a 9B model
@@ -281,13 +284,14 @@ fewer: below a few hundred questions intervals widen and simple formulas for the
 **7. Drafted by models, written and checked by hand.**
 What: seed sections are sampled per Act (70% at random for coverage, 30% from lists of the most
 renumbered and most cited sections, for realism); a model drafts questions, gold sections, key facts
-and a short gold answer from each seed; drafts come from two model families, half each (Mistral Large,
-and gpt oss 120b on Groq; never Gemini, the judge's family); Tanush writes at least a quarter of the
-questions himself, including every Hinglish one and most layperson situations. A checking script shows
-each draft beside the full text of its gold sections and their neighbours, and records accept, edit or
-reject against a checklist: answerable from the text alone, gold sections complete, key facts exactly
-right, wording natural and not copied from the section. A random 10% is checked again a week later;
-the agreement is reported, as the ceiling for any judge.
+and a short gold answer from each seed; drafts come from two model families, half each
+(Mistral Large 3 on NVIDIA's free endpoints, and gpt oss 120b on Groq; never Gemini, the judge's
+family); Tanush writes at least a quarter of the questions himself, including every Hinglish one and
+most layperson situations. A checking script shows each draft beside the full text of its gold
+sections and their neighbours, and records accept, edit or reject against a checklist: answerable from
+the text alone, gold sections complete, key facts exactly right, wording natural and not copied from
+the section. A random 10% is checked again a week later; the agreement is reported, as the ceiling for
+any judge.
 Why: drafting makes 550 questions feasible; hand checking makes them right. Drafted questions borrow
 the section's words and flatter BM25, so the share written by hand, the lexical overlap (the BM25
 rank of each gold section) and every result by author (drafted by family A, by family B, by hand)
@@ -325,7 +329,7 @@ about 150 answers from M1's baselines, balanced between pass and fail where poss
 judge's examples, 40% tune its prompt, 40% measure it once. The judge is trusted when its true
 positive and true negative rates both reach 0.90; it is measured again on 100 labels of M4's agent
 answers, whose errors are subtler. If it still falls short after its prompt is revised, Mistral
-Large is the fallback, the one free model with quota enough; it shares the development model's family,
+Large 3 is the fallback, a free model with quota enough; it shares the development model's family,
 so its rates are measured on fresh labels separately for Mistral's answers and for other families',
 and it is used only if they agree.
 Why: judges agree with people about as often as people agree with each other in the best studies, but
@@ -339,11 +343,11 @@ for the same reason no Google model (Gemini or Gemma) is a system under test.
 **11. Intervals over seed sections, paired tests, repeated runs.**
 What: 10,000 bootstrap resamples of seed sections with all their questions (as DocLens resampled page
 designs); paired bootstrap differences with p values; every final system on the development model run
-three times at temperature 0, its runs pooled per question and the spread between them reported
-(Mistral Large, Groq's and the local models once, for the judge's quota and the Mac's hours). Three
-comparisons are declared before the test read: the agent against M3's best pipeline, M3's best against
-the standard recipe, and the standard recipe against the same model from memory; all others are
-exploratory.
+three times at temperature 0, its runs pooled per question and the spread between them reported (the
+other Mistral model, Groq's and the local models once, for the judge's quota and the Mac's hours).
+Three comparisons are declared before the test read: the agent against M3's best pipeline, M3's best
+against the standard recipe, and the standard recipe against the same model from memory; all others
+are exploratory.
 Why: questions from one section share their difficulty, so treating them as independent makes
 intervals too narrow (Anthropic's guide to error bars on evals); below a few hundred items, intervals
 from central limit theorem formulas come out too narrow, so they come from resampling, as in DocLens;
@@ -352,7 +356,7 @@ per pair of systems without declaring any: with a dozen systems, some difference
 significant by chance.
 
 **12. Baseline 1: models answering from memory.**
-What: Mistral Small, Medium and Large, gpt oss 120b and Qwen3.8 27B on Groq, and Qwen3.5 9B on the
+What: Mistral Small 4 and Large 3, gpt oss 120b and Qwen3.8 27B on Groq, and Qwen3.5 9B on the
 Mac answer every validation question with citations, no retrieval, in the same output format as
 Dhara.
 Why: it is what most people do today, and it measures what the models already know, including how
@@ -362,63 +366,87 @@ what retrieval adds.
 **13. Baseline 2: the standard RAG recipe, built as tutorials build it.**
 What: LangChain's recursive character splitter at 1,000 characters with 200 of overlap over the PDF
 text, LangChain's default Hugging Face embedder, the top 4 chunks (its default for similarity search,
-checked against the installed version), one prompt that asks for citations; run with Mistral Small
-and Medium, and with Qwen3.5 9B on the Mac.
+checked against the installed version), one prompt that asks for citations; run with Mistral Small 4
+and Large 3, and with Qwen3.5 9B on the Mac.
 Why: "baselines first: measure the standard tool". This is the tool most RAG systems start as, and
 its failure (chunks that cut sections apart and lose their numbers) is what M2 sets out to fix. Why
 not a tuned baseline: then nothing would measure what the tuning bought.
 
-**14. Free tiers only: Mistral to develop on, Gemini to judge, Groq and the Mac to compare.**
-What: Tanush's choice, so nothing is paid. M1 compares Mistral Small and Medium from memory and in the
-standard recipe on validation and keeps the more accurate one that returns valid structured output
-nearly always, pinned by version for the rest of the project. Gemini 3.5 Flash Lite judges (decision
-10). Mistral Large, and gpt oss 120b and Qwen3.8 27B on Groq, are the strongest free models compared;
-Qwen3.5 9B and 4B run through Ollama in M1 (the benchmark, and the 9B in both baselines) and in M5 on
-the test set; the service can use an API or the local model.
+**14. Free tiers only: NVIDIA to develop on, Gemini to judge, Groq and the Mac to compare.**
+What: Tanush's choice, so nothing is paid. M1 compares Mistral Small 4 and Mistral Large 3, Mistral's
+open weights served free on NVIDIA's API, from memory and in the standard recipe on validation, and
+keeps the more accurate one that returns valid structured output nearly always, pinned by version for
+the rest of the project. Gemini 3.5 Flash Lite judges (decision 10). The other of the two, and gpt oss
+120b and Qwen3.8 27B on Groq, are the strongest free models compared; Qwen3.5 9B and 4B run through
+Ollama in M1 (the benchmark, and the 9B in both baselines) and in M5 on the test set; the service can
+use an API or the local model, but not NVIDIA's free endpoints, whose terms exclude production use.
 Why: M3 to M6 need about 17,000 development requests and 51 million tokens (Appendix A), and only
-Mistral's free plan (about a billion tokens a month per model) holds that; Gemini's 500 requests a day
-suit the judge, whose calls code keeps few; Groq's 200,000 tokens a day hold about 200 questions from
-memory or 50 with retrieval, too little to develop on. On the Mac the agent takes about 2 minutes a
-question, so local models are measured, not developed on; they answer the privacy question ("can this
-run offline on a laptop, and how much worse is it"). This is the exception to "everything runs on the
-Mac" that working rule 6 allows by decision: the generator runs remotely, every number is still
-produced on the Mac. Free tiers see the prompts, and two may train on them; every prompt holds only
-public law text and Dhara's own questions, never personal data.
+NVIDIA's free endpoints (about 40 requests a minute, no daily cap published) hold that; Gemini's 500
+requests a day suit the judge, whose calls code keeps few; Groq's 200,000 tokens a day hold about 200
+questions from memory or 50 with retrieval, too little to develop on. On the Mac the agent takes about
+2 minutes a question, so local models are measured, not developed on; they answer the privacy question
+("can this run offline on a laptop, and how much worse is it"). This is the exception to "everything
+runs on the Mac" that working rule 6 allows by decision: the generator runs remotely, every number is
+still produced on the Mac. Free tiers see the prompts, and two may use them (NVIDIA's and Gemini's);
+every prompt holds only public law text and Dhara's own questions, never personal data. NVIDIA may end
+its free endpoints at any time; the cache keeps every answer already used, and other hosts serve the
+same open weights.
 Why not paid APIs: Tanush's choice; M5 states what the same runs would cost at list prices. Why not
-Gemini to develop on: 500 requests a day would stretch M4 alone over about two weeks. Why not develop
-on the local model: weeks of compute for each round of choices.
+Mistral's own API, as first planned: its Free mode no longer includes API access, and its consumer
+terms limit the API to business customers, which an individual is not; NVIDIA serves the same
+weights. Why not Mistral Medium, the first plan's second candidate: Mistral has deprecated its last
+version, and the two compared are the Mistral weights NVIDIA serves. Why not Gemini to develop on: 500
+requests a day would stretch M4 alone over about two weeks. Why not develop on the local model: weeks
+of compute for each round of choices.
 
 **15. Every model call through one client: cached, versioned, paced.**
-What: one interface over Mistral, Gemini, Groq and Ollama; every call cached in SQLite under a hash of
-provider, model version, messages and settings; every response stored with its tokens, seconds and
-what it would cost at list prices; each provider's free limits (requests and tokens a minute and a
-day) counted by the client, calls paced to stay under them, and a run that reaches a daily limit
-stops cleanly and resumes from the cache the next day; retries with backoff when a provider answers
-429; a replay mode that rebuilds every table from the cache without a call; API keys read from a
-`.env` file that git ignores. Each results file names the machine, the models with versions, the
-prompt hashes and the corpus manifest.
+What: `src/dhara/llm.py`, one client in the standard library over NVIDIA's and Groq's chat completions
+endpoints, Gemini's own generateContent and Ollama's /api/chat. Every call is cached in SQLite
+(`runs/llm.sqlite`) under a hash of provider, model, version, messages and settings, and stored with
+its tokens (thinking included, as providers bill it), seconds, what it would cost at list prices, the
+provider's whole answer and the counts of remaining requests it sent back. Each provider's free limits
+(requests and tokens a minute and a day) are counted in the same database over rolling windows, so
+runs on different days share one count; a call waits until every limit has room, and when the wait
+would pass two minutes (a daily limit) the run stops, says when to run again, and resumes from the
+cache then. A 429 or a server error is retried five times, waiting as long as the provider asks, or 2,
+4, 8, 16 and 32 seconds; a refused request is not retried. A replay mode answers from the cache only
+and fails on any call it has not seen. API keys come from the environment or a `.env` file that git
+ignores. Each results file names the machine, the models with versions, the prompt hashes and the
+corpus manifest.
 Why: reruns cost nothing and give the same numbers; tokens per question are measured, not estimated;
 free tiers answer 429 when a limit is crossed, and pacing turns that into a slower run instead of a
-broken one; an API model can change or be retired, and the cache keeps the evidence. Why not
-LangChain's model wrappers: one more layer between the code and the measured call. Why not MLflow:
-there is no training; each run's manifest and results file are enough.
+broken one; an API model can change or be retired, and the cache keeps the evidence. A rolling window
+also stays under a limit that resets at midnight. A call's tokens are estimated from its characters
+(one token for every three) only to pace it before it is sent; every count recorded is the provider's
+own. Gemini is called through its own API: Google calls its OpenAI compatible endpoint beta and
+advises calling the API directly without the OpenAI libraries, and its own answer reports thinking
+tokens apart and the model version that answered.
+Why not LangChain's model wrappers: one more layer between the code and the measured call. Why not the
+providers' SDKs: four packages for what one module of standard library code does, and the tests
+replace the network with a fake in one place (decision 22). Why not MLflow: there is no training; each
+run's manifest and results file are enough.
 
 **16. Ollama's context set explicitly, and checked.**
-What: every local request sets `num_ctx` to fit its prompt, and a run fails if any prompt's token
-count exceeds it.
+What: every local request sets `num_ctx` to fit its prompt and its reply; the client refuses a local
+call without it, and fails one whose prompt, with the reply's maximum, reaches the window. Ollama does
+not document what it does with a longer prompt, so the benchmark (decision 17) sends one and confirms
+that the check catches it before any long run.
 Why: on a Mac with under 24 GiB of GPU memory Ollama defaults to a 4,096 token context and drops the
 excess silently; an agent prompt with eight sections exceeds it, and the model would quietly answer
 from half its evidence. Why not raise the server default: a per request setting is visible in the
 code and the results file.
 
-**17. A benchmark before any long local run.**
+**17. A benchmark before any long local run, on a quiet machine.**
 What: `scripts/bench_llm.py` measures, for each local candidate, prompt and generation tokens per
 second at the real prompt sizes (1,000 to 10,000 tokens), peak memory with the embedder and reranker
 loaded, and whether Ollama uses its MLX engine or llama.cpp on this Mac; it also records the chip's
-GPU cores (10 on the 15 inch M2 Air, as the estimates here assume).
+GPU cores (10 on the 15 inch M2 Air, as the estimates here assume). It runs, like every long or heavy
+run (local models, indexing, benchmarks, load tests, Docker builds), only after Tanush's go ahead and
+while nothing else heavy runs on the Mac, and its results file says so.
 Why: DocLens's first CRNN run died of memory a benchmark would have shown; on a fanless Air long runs
 can also slow with heat, so the benchmark runs long enough to show it. Ollama's MLX engine first
-needed more than 32 GB, so which engine runs here must be measured.
+needed more than 32 GB, so which engine runs here must be measured. The Mac is shared with other
+projects' work, and seconds and memory measured beside another heavy job describe both jobs.
 
 **24. Every old to new pair labelled by what changed and by its shape.**
 What: each correspondence row gets two labels. What changed: unchanged (the same text under a new
@@ -569,10 +597,11 @@ place only if M4's ablations say so.
 **21. FastAPI with streaming, Docker Compose, the model outside the containers.**
 What: FastAPI with native Server Sent Events (since FastAPI 0.135) streams the agent's steps and the
 answer; Compose runs the API and PostgreSQL; the model is an API, or Ollama running natively on the
-Mac and reached from the containers.
+Mac and reached from the containers. The service's port is one no other project uses, checked in
+their README and plan files when M6 begins (DocLens's service uses 8000).
 Why: SSE is one way, plain HTTP and enough for streaming text; Docker containers on a Mac get no
-Apple GPU, so a model inside one would run on the CPU. Why not WebSockets: two way channels the
-service does not need.
+Apple GPU, so a model inside one would run on the CPU; other projects' services run on the same Mac.
+Why not WebSockets: two way channels the service does not need.
 
 **22. CI as in DocLens, with a fake model.**
 What: GitHub Actions with DocLens's `scripts/ci_step.sh` and `scripts/ci_annotate.py`: lint, types
@@ -662,15 +691,15 @@ kind. Results: `m4_agent.md`.
 
 ### M5 Comparison
 
-The test set, read once, for every frozen system: models from memory (the development model, Mistral
-Large, gpt oss 120b and Qwen3.8 27B on Groq, Qwen3.5 9B and 4B on the Mac); the standard recipe on the
-development model; M3's best pipeline on the development model and both Qwen3.5 models; the agent on
-those three and Mistral Large. If a free host serves the same open weights as a local model, 100 test
-questions read through both separate the model from its serving (DocLens's PaddleOCR VL lesson); if
-none does, that is recorded as not measured. Reported with intervals and the three declared paired
-comparisons, beside tokens per question, cost at list prices, latency, memory, privacy and licence.
-Spread over days to fit the quotas: the judge about five days, Groq one or two days per model, the 9B
-model's agent about ten hours, overnight. Results: `m5_compare.md`.
+The test set, read once, for every frozen system: models from memory (the development model, the other
+Mistral model, gpt oss 120b and Qwen3.8 27B on Groq, Qwen3.5 9B and 4B on the Mac); the standard
+recipe on the development model; M3's best pipeline on the development model and both Qwen3.5 models;
+the agent on those three and the other Mistral model. If a free host serves the same open weights as a
+local model, 100 test questions read through both separate the model from its serving (DocLens's
+PaddleOCR VL lesson); if none does, that is recorded as not measured. Reported with intervals and the
+three declared paired comparisons, beside tokens per question, cost at list prices, latency, memory,
+privacy and licence. Spread over days to fit the quotas: the judge about five days, Groq one or two
+days per model, the 9B model's agent about ten hours, overnight. Results: `m5_compare.md`.
 
 ### M6 Ship
 
@@ -708,13 +737,13 @@ calls (decisions 3, 15).
 
 ```
 src/dhara/
-    corpus.py       the Acts and the tables: where each file comes from, pinned
+  corpus.py       the Acts and the tables: where each file comes from, pinned
   parse.py        India Code PDFs into sections; footnotes apart
   tables.py       the BNSS First Schedule and the old to new correspondence
   refs.py         section references in questions ("s. 498A IPC", "dhara 302")
   chunking.py     the recipe's chunks, sections with headers, clauses with parents
   retrieval/      bm25, dense, fusion, rerank: exact and in process (M2)
-  llm.py          one client: Mistral, Gemini, Groq and Ollama; cache, tokens, quota pacing
+  llm.py          one client: NVIDIA, Groq, Gemini and Ollama; cache, tokens, pacing under free limits
   answer.py       structured answers, citation and quote checks (M3)
   agent.py        the LangGraph agent and its tools (M4)
   judge.py        the judge's binary checks
@@ -746,13 +775,14 @@ Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLen
   overlap and results by author reported (decision 7).
 * **The judge is wrong:** validated twice, code checks first (decisions 9, 10).
 * **API models change or retire:** pinned versions, the cache, a local model as a stable reference.
-* **Test questions reach providers that may train on them** (Mistral's free plan, Gemini's free
+* **Test questions reach providers that may use them** (NVIDIA's free endpoints, Gemini's free
   tier): the models measured are versions pinned before the questions were written, so they cannot
   have learned them; results name the versions, and a later version is compared only on fresh
   questions.
-* **Free tiers change or vanish** (Cerebras ended its free tier; GitHub Models was retired): the
-  cache keeps every answer already used, three providers and the Mac back each other up, and M1
-  records the limits each account really has.
+* **Free tiers change or vanish** (Mistral closed its API to individuals, Cerebras ended its free
+  tier, GitHub Models was retired): the cache keeps every answer already used, three providers and
+  the Mac back each other up, other hosts serve the same open weights, and M1 records the limits each
+  account really has.
 * **The Mac's limits:** 16 GB, a fanless Air that slows with heat, Ollama's silent truncation
   (decisions 16, 17).
 * **Hand work:** about 18 hours for the questions and 6 for the judge's labels; the checking script
@@ -766,13 +796,19 @@ Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLen
 4. The six criminal law Acts (decision 1).
 5. After review: the change labels, which law applies with asking, the answer's shape and corrective
    retrieval (decisions 24 to 27).
+6. When Mistral closed its API to individuals: develop on NVIDIA's free endpoints, with the same
+   Mistral weights (decision 14).
 
 ## Before M1's baselines run
 
-* Three free accounts: Mistral (a phone check, and the Experiment plan requires opting in to
-  training on your prompts), Google AI Studio for a Gemini API key (free tier prompts may be used
-  to improve Google's products), and Groq (states it does not train on API data). Every prompt holds
-  only public law text and Dhara's own questions.
+* Three free accounts: the NVIDIA Developer Program, for an API key from build.nvidia.com (its trial
+  terms let NVIDIA use prompts to improve its products), Google AI Studio for a Gemini API key (free
+  tier prompts may be used to improve Google's products), and Groq (states it does not train on API
+  data). Each key goes in `.env`, copied from `.env.example`. Every prompt holds only public law text
+  and Dhara's own questions.
+* Each account's real limits recorded in M1: build.nvidia.com shows NVIDIA's rate limit, Google AI
+  Studio shows Gemini's, and Groq sends its own count of what is left with every answer, which the
+  client stores.
 
 ## Appendix A: the arithmetic behind the estimates
 
@@ -780,20 +816,20 @@ Tokens per request, in plus out (assumed; M1 measures them): from memory 1,000; 
 1,900 (four chunks); plain RAG 3,950 (eight sections); an agent call 3,000, at 3.3 calls a question;
 a judge call 2,750.
 
-Answers over the project: M1, six models from memory and three in the recipe on 150 validation
-questions; M3, 12 settings; M4, 15 settings and ablations, and corrective retrieval with each of
-its two graders (the model grader adds about one call a question); M5, the test set for every system
-listed there, each system on the development model three times; M6, the test set once more through
-the service: about 12,600 answers. If code scores 60% of them alone (estimate), the judge makes about
+Answers over the project: M1, five models from memory and three in the recipe on 150 validation
+questions; M3, 12 settings; M4, 15 settings and ablations, and corrective retrieval with each of its
+two graders (the model grader adds about one call a question); M5, the test set for every system
+listed there, each system on the development model three times; M6, the test set once more through the
+service: about 12,500 answers. If code scores 60% of them alone (estimate), the judge makes about
 5,000 calls, and about 600 more while its prompt is tuned and validated: 5,600 calls, 15.5 million
 tokens, 11 days of Gemini's 500 requests a day. Drafting: about 600 drafts, half per family, two a
 call at 3,700 tokens. The development model in M3 to M6: about 17,000 requests and 51 million tokens;
-all Mistral models together about 19,200 requests, 5.3 hours at one request a second (160 hours if the
-limit were 2 requests a minute, as one guide states). Groq: gpt oss 120b 600 requests and 1.0 million
-tokens with its drafts, 5 days at 200,000 tokens a day; Qwen3.8 27B 450 requests and 0.45 million
-tokens, 2.2 days. On the Mac (the 15 inch M2 Air has 10 GPU cores; estimate): the 300 test questions
-take the 9B model 1.9 hours from memory, 3.9 with retrieval and 9.8 as the agent (15.5 in all), and
-the 4B model 0.8, 1.7 and 4.3 (6.9 in all).
+all models on NVIDIA's free endpoints together about 19,000 requests, 8 hours at 40 requests a minute,
+one call at a time. Groq: gpt oss 120b 600 requests and 1.0 million tokens with its drafts, 5 days at
+200,000 tokens a day; Qwen3.8 27B 450 requests and 0.45 million tokens, 2.2 days. On the Mac (the 15
+inch M2 Air has 10 GPU cores; estimate): the 300 test questions take the 9B model 1.9 hours from
+memory, 3.9 with retrieval and 9.8 as the agent (15.5 in all), and the 4B model 0.8, 1.7 and 4.3 (6.9
+in all).
 
 Local speed: llama.cpp on the M2 with a 7B model at 4 bits processes 146 (8 GPU cores) to 180 (10
 cores) prompt tokens a second and generates about 22 tokens a second; scaled by 7/9 for a 9B model
@@ -824,14 +860,18 @@ Data and law:
 
 Free tiers:
 * Gemini free tier limits (a summary of AI Studio's figures): <https://www.scriptbyai.com/gemini-api-free-tier-limits/>; rate limits: <https://ai.google.dev/gemini-api/docs/rate-limits>
-* Groq free plan limits: <https://www.developersdigest.tech/models/free-api/groq>; Groq's data terms: <https://standardcompute.com/providers/groq>
-* Mistral's Experiment plan: <https://mintlify.com/cheahjs/free-llm-api-resources/providers/free/mistral-plateforme>
+* Groq free plan limits, and the counts it sends back: <https://console.groq.com/docs/rate-limits>; Groq's data terms: <https://standardcompute.com/providers/groq>
+* NVIDIA's free endpoints, for research, development and testing: <https://forums.developer.nvidia.com/t/nvidia-nim-faq/300317>; limits set per account and shown on build.nvidia.com: <https://forums.developer.nvidia.com/t/request-more-4-000-credits-option-on-build-nvidia-com/344567>; about 40 requests a minute: <https://forums.developer.nvidia.com/t/is-nim-free/369368>; trial terms on prompts: <https://forums.developer.nvidia.com/t/api-trial/385386>
+* Mistral's Free mode without API access: <https://docs.mistral.ai/admin/billing-usage/usage-limits>; its consumer terms, the API for business customers only: <https://legal.mistral.ai/terms/row-consumer-terms>; Mistral Medium 3.5 deprecated: <https://docs.mistral.ai/models.md>
 * Cerebras ends its free tier: <https://claudelog.com/faqs/is-cerebras-free/>; GitHub Models retired: <https://fast.io/resources/github-models-rate-limit/>; OpenRouter's free limits: <https://blogs.novita.ai/free-llm-api-comparison-2026/>
 
 Models, list prices and speed:
-* Mistral prices: <https://docs.mistral.ai/inference/pricing>
+* Mistral Small 4 on NVIDIA's API: <https://docs.api.nvidia.com/nim/reference/mistralai-mistral-small-4-119b-2603-infer>; Mistral Large 3, a free endpoint there: <https://build.nvidia.com/mistralai/mistral-large-3-675b-instruct-2512>
+* Mistral prices: <https://docs.mistral.ai/inference/pricing>; Mistral Large 3's, from Mistral's price page as captured: <https://www.usagepricing.com/blueprint/activity/mistral-ai-2026-10-22-large-4-sale-ends>
 * Groq prices: <https://www.groq.com/pricing>; per model, from GroqCloud's documentation: <https://www.morphllm.com/groq-pricing>
-* Gemini prices: <https://ai.google.dev/gemini-api/docs/pricing>
+* Gemini prices: <https://ai.google.dev/gemini-api/docs/pricing>; Gemini 3.5 Flash Lite's: <https://www.developersdigest.tech/models/gemini-3-5-flash-lite>
+* Gemini's own API: structured output <https://ai.google.dev/gemini-api/docs/structured-output>, thinking levels <https://ai.google.dev/gemini-api/docs/generate-content/thinking>; its OpenAI compatible endpoint, in beta: <https://ai.google.dev/gemini-api/docs/openai>
+* Groq's chat completions API: <https://console.groq.com/docs/api-reference>; Ollama's API: <https://docs.ollama.com/openapi.yaml>
 * llama.cpp on Apple silicon: <https://github.com/ggml-org/llama.cpp/discussions/4167>
 * The 15 inch M2 MacBook Air (10 GPU cores in every configuration): <https://www.notebookcheck.net/First-ever-15-inch-Apple-MacBook-Air-powered-by-M2-launched-configurations-start-from-US-1-299.723979.0.html>
 * Ollama's MLX engine: <https://ollama.com/blog/mlx>; context defaults: <https://fast.io/resources/ollama-context-length/>
