@@ -11,6 +11,7 @@ line below the first line of its row. A section whose offence is set out as a le
 otherwise provided for:") followed by clauses (a), (b) gives one row per clause, each with the lead in.
 """
 
+import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -482,3 +483,35 @@ def words_kept(path: Path, rows: Sequence[Correspondence]) -> tuple[int, Counter
     texts = (text for row in rows for text in (row.new, row.old, row.subject, row.summary))
     held = Counter(token for text in texts for token in _tokens(text))
     return sum(printed.values()), printed - held, held - printed
+
+
+# Old sections that no row names (decision 24): each was dropped by the new Act, or went into a new section
+# without CAPT naming it. A comparison of the texts proposes which, for Tanush to confirm.
+MOVED = 0.5  # a share at or above this proposes that the old section went into the nearest new one
+
+
+def phrases(text: str) -> set[tuple[str, ...]]:
+    """The runs of three words in a text, the unit the comparison counts."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {tuple(words[i : i + 3]) for i in range(len(words) - 2)}
+
+
+def nearest(
+    old: dict[str, str], new: dict[str, str], which: Sequence[str]
+) -> dict[str, list[tuple[float, str]]]:
+    """For each old section named in which, the two new sections that hold the largest share of its
+    phrases, each phrase weighted by how rare it is across both Acts, so that the formulas every section
+    repeats ("shall be punished with imprisonment") count for little."""
+    old_phrases = {number: phrases(text) for number, text in old.items()}
+    new_phrases = {number: phrases(text) for number, text in new.items()}
+    documents = Counter(p for found in (*old_phrases.values(), *new_phrases.values()) for p in found)
+    total = len(old_phrases) + len(new_phrases)
+    weight = {p: math.log(total / count) for p, count in documents.items()}
+    found: dict[str, list[tuple[float, str]]] = {}
+    for number in which:
+        mine = old_phrases[number]
+        whole = sum(weight[p] for p in mine)
+        shares = [(sum(weight[p] for p in mine & theirs) / whole if whole else 0.0, other)
+                  for other, theirs in new_phrases.items()]
+        found[number] = sorted(shares, reverse=True)[:2]
+    return found

@@ -9,10 +9,11 @@ three tables in data/raw (scripts/get_data.py); the Acts' sections from data/par
 names against the Acts, checks the schedule's terms of punishment against the words of their sections,
 checks that every word inside a correspondence table reached a row, and lists what stands out.
 
-Two hand check sheets in docs/checks hold 50 rows each, drawn with a fixed seed: first_schedule.csv and
-correspondence.csv. Each is written only when it does not exist, so the verdicts filled into it are never
-overwritten: its verdict column takes "ok", or a note of what is wrong. A row that no longer matches the
-reader's output is reported as changed since it was checked.
+Three hand check sheets sit in docs/checks: first_schedule.csv and correspondence.csv hold 50 rows each,
+drawn with a fixed seed; unnamed.csv holds every old section that no correspondence row names, with the
+new section a comparison of the texts proposes. Each is written only when it does not exist, so the
+verdicts filled into it are never overwritten: its verdict column takes "ok", or a note of what is wrong.
+A row that no longer matches the script's output is reported as changed since it was checked.
 """
 
 import csv
@@ -33,6 +34,7 @@ from dhara import DATA, REPO
 from dhara.corpus import ACT, ACTS, TABLES
 from dhara.tables import (
     CHANGES,
+    MOVED,
     Correspondence,
     ScheduleRow,
     base_section,
@@ -40,6 +42,7 @@ from dhara.tables import (
     court_kind,
     first_schedule,
     kind,
+    nearest,
     terms,
     words_kept,
 )
@@ -67,6 +70,11 @@ CORRESPONDENCE_SHEET = Sheet(
     ("table", "new", "old", "old_sections", "subject", "summary", "change", "shape"),
     lambda row: f"{row['table'].removesuffix('_table')} {row['new']}",
 )
+UNNAMED_SHEET = Sheet(
+    REPO / "docs" / "checks" / "unnamed.csv",
+    ("act", "old", "heading", "nearest", "nearest_heading", "share", "proposed"),
+    lambda row: f"{row['act']} {row['old']}",
+)
 
 
 def flat(row: Any) -> dict[str, str]:
@@ -78,13 +86,14 @@ def flat(row: Any) -> dict[str, str]:
 
 
 def write_sheet(sheet: Sheet, rows: Sequence[dict[str, str]]) -> None:
-    drawn = sorted(random.Random(SEED).sample(range(len(rows)), SAMPLE))
+    """The rows to check by hand: a sample drawn with the seed, or all of them when there are fewer."""
+    drawn = sorted(random.Random(SEED).sample(range(len(rows)), SAMPLE)) if len(rows) > SAMPLE else range(len(rows))
     sheet.path.parent.mkdir(parents=True, exist_ok=True)
     with sheet.path.open("w", encoding="utf8", newline="") as out:
         writer = csv.writer(out)
         writer.writerow(["n", "page", *sheet.fields, "verdict"])
         for n, index in enumerate(drawn, start=1):
-            writer.writerow([n, rows[index]["page"], *(rows[index][name] for name in sheet.fields), ""])
+            writer.writerow([n, rows[index].get("page", ""), *(rows[index][name] for name in sheet.fields), ""])
 
 
 def read_sheet(sheet: Sheet, rows: Sequence[dict[str, str]]) -> tuple[int, int, list[str], list[str]]:
@@ -104,7 +113,8 @@ def read_sheet(sheet: Sheet, rows: Sequence[dict[str, str]]) -> tuple[int, int, 
             if verdict.lower() == "ok":
                 right += 1
             else:
-                wrong.append(f"row {entry['n']} ({sheet.label(entry)}, page {entry['page']}): {verdict}")
+                page = f", page {entry['page']}" if entry.get("page") else ""
+                wrong.append(f"row {entry['n']} ({sheet.label(entry)}{page}): {verdict}")
     return checked, right, wrong, changed
 
 
@@ -113,9 +123,11 @@ def hand_check(sheet: Sheet, rows: Sequence[dict[str, str]], against: str) -> li
         return ["No sheet yet."]
     checked, right, wrong, changed = read_sheet(sheet, rows)
     where = f"`{sheet.path.relative_to(REPO)}`"
+    size = min(SAMPLE, len(rows))
     if not checked:
-        return [f"{SAMPLE} rows drawn with seed {SEED} into {where}; none checked yet."]
-    lines = [f"{checked} of {SAMPLE} rows in {where} checked by hand against {against}: {right} right."]
+        drawn = f"drawn with seed {SEED}" if len(rows) > SAMPLE else "every one"
+        return [f"{size} rows in {where}, {drawn}; none checked yet."]
+    lines = [f"{checked} of {size} rows in {where} checked by hand against {against}: {right} right."]
     if wrong:
         lines += ["", *(f"* {note}" for note in wrong)]
     if changed:
@@ -223,8 +235,37 @@ def schedule_report(rows: list[ScheduleRow], bns: dict[str, str]) -> list[str]:
     ]
 
 
-def correspondence_report(tables: dict[str, list[Correspondence]]) -> list[str]:
-    counts, labels, unnamed, header = [], [], [], []
+def unnamed_sections(tables: dict[str, list[Correspondence]]) -> list[dict[str, str]]:
+    """The old sections in force that no row names, each with the new section the comparison proposes."""
+    found = []
+    for source in TABLES:
+        new_act = ACT[source.act]
+        old_act = next(act for act in ACTS if act.replaced_by == new_act.key)
+        new, old = load_sections(new_act.key), load_sections(old_act.key)
+        named = {section for row in tables[source.key] for section in row.old_sections}
+        left = [n for n, section in old.items() if n not in named and section["status"] == "in force"]
+        texts = {n: " ".join([s["heading"], *s["paragraphs"]]) for n, s in old.items()}
+        candidates = nearest(texts, {n: " ".join([s["heading"], *s["paragraphs"]]) for n, s in new.items()}, left)
+        for number in left:
+            (share, best), (second, runner) = candidates[number]
+            found.append(
+                {
+                    "act": old_act.short,
+                    "old": number,
+                    "heading": old[number]["heading"],
+                    "nearest": f"{new_act.short} {best}",
+                    "nearest_heading": new[best]["heading"],
+                    "share": f"{share:.2f}",
+                    "runner_up": f"{new_act.short} {runner}",
+                    "runner_up_share": f"{second:.2f}",
+                    "proposed": f"into {new_act.short} {best}" if share >= MOVED else "omitted",
+                }
+            )
+    return found
+
+
+def correspondence_report(tables: dict[str, list[Correspondence]], unnamed: list[dict[str, str]]) -> list[str]:
+    counts, labels, header = [], [], []
     sources = {source.key: source for source in TABLES}
     for key, rows in tables.items():
         new_act = ACT[sources[key].act]
@@ -253,9 +294,6 @@ def correspondence_report(tables: dict[str, list[Correspondence]]) -> list[str]:
             + " | ".join(str(shape[name]) for name in SHAPES)
             + " |"
         )
-        named = {section for row in rows for section in row.old_sections}
-        left = [n for n, section in old.items() if n not in named and section["status"] == "in force"]
-        unnamed.append(f"* {old_act.short}: {', '.join(left) if left else 'none'}")
     everything = [row for rows in tables.values() for row in rows]
     return [
         "## The old to new correspondence",
@@ -281,14 +319,28 @@ def correspondence_report(tables: dict[str, list[Correspondence]]) -> list[str]:
         "The shape comes from the sections the rows name, taken whole: merged when a new section takes in "
         "several old ones, split when an old section went to several new ones.",
         "",
-        "Old sections in force that no row names; each was dropped by the new Act, or went into a new section "
-        "without CAPT naming it, and the text comparison of decision 24 tells which:",
-        "",
-        *unnamed,
-        "",
         "### Hand check (decisions 5 and 24)",
         "",
         *hand_check(CORRESPONDENCE_SHEET, [flat(row) for row in everything], "CAPT's tables and their labels"),
+        "",
+        "### Old sections that no row names (decision 24)",
+        "",
+        "Each old section in force that no row names was dropped by the new Act, or went into a new section "
+        "without CAPT naming it. For each, the comparison finds the new section that holds the largest share "
+        "of its phrases (runs of three words, each weighted by how rare it is across both Acts, so that the "
+        "formulas every section repeats count for little), and the runner up. A share of "
+        f"{MOVED} or more proposes that it went into that section; less proposes that it was dropped. Tanush "
+        "confirms each.",
+        "",
+        "| Old section | Its heading | Nearest new section | Share | Runner up | Share | Proposed |",
+        "|---|---|---|---:|---|---:|---|",
+        *(
+            f"| {row['act']} {row['old']} | {row['heading']} | {row['nearest']} ({row['nearest_heading']}) "
+            f"| {row['share']} | {row['runner_up']} | {row['runner_up_share']} | {row['proposed']} |"
+            for row in unnamed
+        ),
+        "",
+        *hand_check(UNNAMED_SHEET, unnamed, "both Acts' texts"),
         "",
     ]
 
@@ -311,10 +363,11 @@ def main() -> int:
         )
     part_one = [flat(row) for row in schedule if row.part == "I"]
     pairs = [flat(row) for table in tables.values() for row in table]
-    for sheet, drawn_from in ((SCHEDULE_SHEET, part_one), (CORRESPONDENCE_SHEET, pairs)):
+    unnamed = unnamed_sections(tables)
+    for sheet, drawn_from in ((SCHEDULE_SHEET, part_one), (CORRESPONDENCE_SHEET, pairs), (UNNAMED_SHEET, unnamed)):
         if not sheet.path.exists():
             write_sheet(sheet, drawn_from)
-            print(f"wrote {sheet.path.relative_to(REPO)}, {SAMPLE} rows to check by hand")
+            print(f"wrote {sheet.path.relative_to(REPO)}, {min(SAMPLE, len(drawn_from))} rows to check by hand")
     bns = {number: lowered(section) for number, section in load_sections("bns").items()}
     lines = [
         "# M1: the tables",
@@ -324,7 +377,7 @@ def main() -> int:
         f"{platform.python_version()}; pdfplumber {pdfplumber.__version__}.",
         "",
         *schedule_report(schedule, bns),
-        *correspondence_report(tables),
+        *correspondence_report(tables, unnamed),
     ]
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
     RESULTS.write_text("\n".join(lines), encoding="utf8")

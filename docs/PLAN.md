@@ -431,16 +431,23 @@ column for its type: a comparison that says no more than "No change", that the o
 subsection with its heading dropped, or the note made once that "Code" becomes "Sanhita", means
 unchanged; anything else means modified; "New" or a dash in the old column means new. The shape
 follows from the sections the rows name. Old sections that no row names are listed in `m1_tables.md`:
-each was dropped by the new Act (omitted) or went into a new section without CAPT naming it, and a
-script that compares the two texts proposes which, for Tanush to confirm. Tanush checks the labels on
-decision 5's sample of 50 rows and on every row a gold answer uses. Answers about a change quote both
-sections and name both labels.
+each was dropped by the new Act (omitted) or went into a new section without CAPT naming it. A
+comparison of the texts proposes which: it finds the new section holding the largest share of the old
+section's runs of three words, each weighted by how rare it is across both Acts, so the formulas every
+section repeats ("shall be punished with imprisonment") count for little; a share of 0.5 or more
+proposes the move, less proposes omitted. Tanush confirms every one in `docs/checks/unnamed.csv`.
+Tanush checks the labels on decision 5's sample of 50 rows and on every row a gold answer uses.
+Answers about a change quote both sections and name both labels.
 Why: "is BNS 318 the same as IPC 420" is answered by both labels: in CAPT's table IPC 420 became BNS
 318(4) unchanged, inside a section that also takes in IPC 415, 417 and 418. Two labels rather than one
 type, because a row can be modified and merged at once (BNS 2(8) takes in IPC 29 and 29A and adds
 words), and one type would drop half of that. Reading CAPT's words keeps the hand work small. Why not
 leave the labels to the model reading both texts: that is one of the things M4 measures, not something
-to assume. Why not unchecked labels: they would leak into gold answers.
+to assume. Why not unchecked labels: they would leak into gold answers. Why weight the phrases:
+unweighted, the shared formulas made IPC 309 (attempt to commit suicide) look like BNS 226, a
+different offence; why not take the comparison's word: a threshold cannot tell a section that moved
+from one that was replaced by a new offence in similar words (IPC 124A and BNS 152), which a reader
+can.
 
 **25. Which law applies: savings sections and notifications; a missing fact is asked for.**
 What: "which law applies" questions are answered from the repeal and savings sections (BNS 358, BNSS

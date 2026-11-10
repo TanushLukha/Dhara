@@ -9,7 +9,9 @@ from dhara.tables import (
     change_of,
     court_kind,
     kind,
+    nearest,
     old_sections,
+    phrases,
     terms,
 )
 
@@ -149,3 +151,21 @@ def test_shapes_follow_whole_sections() -> None:
         "merged", "split", "merged and split", "merged", "one to one", "one to one", ""
     ]
     assert rows[5].new_section == "22"
+
+
+def test_the_comparison_finds_where_an_old_section_went_and_discounts_formulas() -> None:
+    formula = "shall be punished with imprisonment for a term which may extend to three years"
+    old = {
+        "143": f"Whoever is a member of an unlawful assembly {formula}",
+        "309": f"Whoever attempts to commit suicide {formula}",
+        "1": f"Whoever steals {formula}",
+    }
+    new = {
+        "189": f"(2) Whoever is a member of an unlawful assembly {formula}",
+        "226": f"Whoever cheats a public servant {formula}",
+        "303": f"Whoever steals {formula}",
+    }
+    found = nearest(old, new, ["143", "309"])
+    assert found["143"][0][1] == "189" and found["143"][0][0] > 0.9
+    assert found["309"][0][0] < 0.5  # the formula is shared by every section, so it counts for little
+    assert ("shall", "be", "punished") in phrases(formula)
