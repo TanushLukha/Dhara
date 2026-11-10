@@ -12,8 +12,9 @@ otherwise provided for:") followed by clauses (a), (b) gives one row per clause,
 """
 
 import re
+from collections import Counter
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -259,3 +260,225 @@ def terms(punishment: str) -> list[str]:
     if lowered.startswith("death"):
         found.append("death")
     return found
+
+
+# The old to new correspondence (decisions 5 and 24), from CAPT Bhopal's three tables. Each is a ruled
+# Word table of four columns; the order of the columns differs between the tables.
+COLUMNS = {
+    "bns_ipc_table": ("new", "subject", "old", "summary"),
+    "bnss_crpc_table": ("new", "subject", "old", "summary"),
+    "bsa_iea_table": ("new", "old", "subject", "summary"),
+}
+CHANGES = ("unchanged", "modified", "new", "heading")
+
+
+@dataclass(frozen=True)
+class Correspondence:
+    table: str  # the source's key, as in corpus.TABLES
+    new: str  # the new Act's provision as the table prints it: "2(8)", "356 (1)"
+    new_section: str  # the section it is in: "2", "356"
+    old: str  # the old Act's provisions as the table prints them: "29 and 29A", "New", "3, para 1"
+    old_sections: tuple[str, ...]  # the old sections they are in: ("29", "29A"); none for a new provision
+    subject: str
+    summary: str  # CAPT's comparison, as printed
+    explanation: str  # the same, with "Ditto." replaced by the comparison it repeats
+    change: str  # unchanged, modified, new, or heading (a row that sums up the rows of its subsections)
+    shape: str  # one to one, merged, split, or merged and split; at the level of whole sections
+    page: int
+
+
+def _inside(inner: tuple[float, ...], outer: tuple[float, ...]) -> bool:
+    """Whether one box lies within another, to a point."""
+    left, top, right, bottom = inner
+    return left >= outer[0] - 1 and top >= outer[1] - 1 and right <= outer[2] + 1 and bottom <= outer[3] + 1
+
+
+def _one_line(text: str) -> str:
+    return join_lines([line.strip() for line in text.splitlines() if line.strip()])
+
+
+def _cells(path: Path, columns: Sequence[str]) -> list[tuple[int, dict[str, str]]]:
+    """Every row of a CAPT table as {column: text}, each cell placed by where it begins on the page."""
+    Box = tuple[float, float, float, float]
+    found: list[tuple[int, Any, list[tuple[Box, str]]]] = []
+    boxes: dict[int, list[Box]] = {}  # every cell on a page, to tell a missing cell from one that spans rows
+    spans: Counter[tuple[tuple[int, int], ...]] = Counter()
+    rows = []
+    with pdfplumber.open(path) as pdf:
+        for number, page in enumerate(pdf.pages, start=1):
+            # A row carried over from the page before has no rule above it, so the table finder would
+            # leave it out; a line where the column rules begin and one where they end close the table.
+            verticals = [r for r in page.rects if r["width"] < 2 and r["height"] > 2]
+            closing = [min(r["top"] for r in verticals), max(r["bottom"] for r in verticals)] if verticals else []
+            tables = page.find_tables(table_settings={"explicit_horizontal_lines": closing})
+            for table in tables:
+                if any(other is not table and _inside(table.bbox, other.bbox) for other in tables):
+                    continue  # a box drawn inside a cell; the cell's own text already holds its words
+                for row, texts in zip(table.rows, table.extract(), strict=True):
+                    cells = [(cell, text or "") for cell, text in zip(row.cells, texts, strict=True) if cell]
+                    found.append((number, page, cells))
+                    boxes.setdefault(number, []).extend(box for box, _ in cells)
+                    if len(cells) == len(columns):
+                        spans[tuple((round(box[0]), round(box[2])) for box, _ in cells)] += 1
+        edges = spans.most_common(1)[0][0]  # each column's left and right edge, from the commonest full row
+
+        def column_of(box: Box) -> int:
+            return max((i for i, (left, _) in enumerate(edges) if left <= box[0] + 2), default=0)
+
+        for number, page, cells in found:
+            placed = {name: "" for name in columns}
+            seen = {column_of(box) for box, _ in cells}
+            for box, text in cells:
+                name = columns[column_of(box)]
+                placed[name] = f"{placed[name]} {_one_line(text)}".strip()
+            if not cells:
+                continue
+            # A cell the finder could not close, its rule missing: read the words inside it, unless a
+            # cell above or below spans this row in that column and so already holds them.
+            top, bottom = min(box[1] for box, _ in cells), max(box[3] for box, _ in cells)
+            for index, (left, right) in enumerate(edges):
+                spanned = any(
+                    column_of(box) == index and box[1] < bottom - 2 and box[3] > top + 2 for box in boxes[number]
+                )
+                if index not in seen and not spanned:
+                    placed[columns[index]] = _one_line(page.crop((left, top, right, bottom)).extract_text() or "")
+            rows.append((number, placed))
+    return rows
+
+
+def _provision(reference: str) -> str | None:
+    """The section a provision is in: "2(1)(w )" is in 2, "356 (1)" in 356; a hyphen before a letter is
+    dropped, as in parse.py."""
+    found = re.match(r"\s*(\d+)(?:-?([A-Z]{1,3}))?(?![a-z])", reference)
+    return f"{found[1]}{found[2] or ''}" if found else None
+
+
+def old_sections(reference: str) -> tuple[str, ...]:
+    """The old sections a reference names: "29 and 29A", "54 & 55", "230 to 232, 246 to 249, 255",
+    "233 / 234", "3, para 1" (section 3), "IEA 3 Interpretation clause"; none for "New", or for a lone dash."""
+    text = re.sub(r"\b(?:IPC|CrPC|IEA)\b", "", reference)
+    text = re.sub(r",?\s*para\s*\d+", "", text)
+    if re.match(r"\s*(?:new\b|-\s*$)", text, re.IGNORECASE) or not text.strip():
+        return ()
+    names: list[str] = []
+    for part in re.split(r",|&|/|\band\b", text):
+        ends = [_provision(end) for end in re.split(r"\bto\b", part)]
+        if len(ends) == 2 and ends[0] and ends[1] and ends[0].isdigit() and ends[1].isdigit():
+            names += [str(n) for n in range(int(ends[0]), int(ends[1]) + 1)]
+        elif len(ends) == 2 and ends[0] and ends[1] and ends[0][:-1] == ends[1][:-1]:  # 354A to 354D
+            names += [f"{ends[0][:-1]}{chr(c)}" for c in range(ord(ends[0][-1]), ord(ends[1][-1]) + 1)]
+        else:
+            names += [end for end in ends if end]
+    return tuple(dict.fromkeys(names))
+
+
+# What a comparison may say and still mean the text is unchanged: no change; the note, made once, that
+# "Code" becomes "Sanhita" throughout; the old section kept whole as a subsection or proviso of the new
+# one, its heading dropped. Anything else it says describes a change. The patterns match the words run
+# together, because the tables sometimes break a word with a space ("sans h eading").
+NOTHING_ELSE = (
+    re.compile(r"codeisreplacedwithsanhita.*hereinafter"),
+    re.compile(r"no(?:other)?changes?(?:weremade)?|withoutanychange|withoutchangingaword"),
+    re.compile(r"except(?:that)?"),
+    re.compile(
+        r"(?:the)?(?:ipc|crpc|iea)?section(?:\d+[a-z]*)?(?:of)?(?:ipc|crpc|iea)?is(?:included|added|presented)"
+        r"(?:in(?:the)?(?:bns|bnss|bsa))?as(?:a)?(?:subsection|proviso)(?:\d+)?(?:(?:in|of)(?:the)?(?:\d+)?(?:bns|bnss|bsa))?"
+    ),
+    re.compile(r"sans(?:its|separate)?headings?"),
+    re.compile(r"(?:the)?headingisdropped(?:as)?"),
+)
+
+
+def change_of(old: tuple[str, ...], reference: str, explanation: str) -> str:
+    """What changed, from the table's own words: unchanged, modified or new; or heading, for a row
+    that sums up the rows of its subsections and names no old section itself."""
+    if not old:
+        return "new" if re.match(r"\s*(?:new\b|-)", reference, re.IGNORECASE) else "heading"
+    rest = re.sub(r"[^a-z0-9]", "", explanation.lower())
+    for pattern in NOTHING_ELSE:
+        rest = pattern.sub("", rest)
+    return "modified" if rest else "unchanged"
+
+
+def _section_in(reference: str) -> str | None:
+    """The section a new provision is in, wherever the reference names it: "2(8)" is in 2, "First
+    proviso to section 22" in 22."""
+    found = re.search(r"(\d+)(?:-?([A-Z]{1,3}))?(?![a-z0-9])", reference)
+    return f"{found[1]}{found[2] or ''}" if found else None
+
+
+def correspondence(path: Path, table: str) -> list[Correspondence]:
+    """The rows of one CAPT table, a row broken over two pages joined again, typed by their change.
+    Rows above the first that names a section are the table's header; any other row whose new column
+    names no section is kept, with no section, so the check can list it."""
+    columns = COLUMNS[table]
+    merged: list[tuple[int, dict[str, str]]] = []
+    for number, texts in _cells(path, columns):
+        if texts["new"] and (merged or _section_in(texts["new"])):
+            merged.append((number, dict(texts)))
+        elif merged and not texts["new"]:  # the rest of the row above, carried over to this page
+            for name, text in texts.items():
+                if text:
+                    merged[-1][1][name] = f"{merged[-1][1][name]} {text}".strip()
+    rows: list[Correspondence] = []
+    explanation = ""
+    for number, texts in merged:
+        ditto = re.sub(r"[^a-z]", "", texts["summary"].lower()) == "ditto"
+        explanation = explanation if ditto and rows else texts["summary"]
+        old = old_sections(texts["old"])
+        new_section = _section_in(texts["new"]) or ""
+        change = change_of(old, texts["old"], explanation)
+        if change == "heading" and not any(
+            _section_in(r[1]["new"]) == new_section and r[1]["new"] != texts["new"] for r in merged
+        ):
+            change = "modified"  # an empty old column with no subsections below it
+        rows.append(
+            Correspondence(table, texts["new"], new_section, texts["old"], old, texts["subject"],
+                           texts["summary"], explanation, change, "", number)
+        )
+    return _shaped(rows)
+
+
+def _shaped(rows: Sequence[Correspondence]) -> list[Correspondence]:
+    """Each row's shape, at the level of whole sections: merged when its new section takes in several
+    old sections, split when one of its old sections went to several new sections."""
+    feeds: dict[str, set[str]] = {}
+    goes: dict[str, set[str]] = {}
+    for row in rows:
+        for old in row.old_sections:
+            feeds.setdefault(row.new_section, set()).add(old)
+            goes.setdefault(old, set()).add(row.new_section)
+    shaped = []
+    for row in rows:
+        merged = len(feeds.get(row.new_section, ())) > 1 and bool(row.old_sections)
+        split = any(len(goes[old]) > 1 for old in row.old_sections)
+        shape = {(False, False): "one to one", (True, False): "merged", (False, True): "split"}.get(
+            (merged, split), "merged and split"
+        )
+        shaped.append(Correspondence(**{**asdict(row), "shape": shape if row.old_sections else ""}))
+    return shaped
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def words_kept(path: Path, rows: Sequence[Correspondence]) -> tuple[int, Counter[str], Counter[str]]:
+    """A check that reading a table lost nothing and repeated nothing: the number of words inside its
+    rules, the words there that no row holds, and the words rows hold more often than the page does.
+    The header's words, above the first row, are expected among the missing."""
+    printed: Counter[str] = Counter()
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            verticals = [r for r in page.rects if r["width"] < 2 and r["height"] > 2]
+            if verticals:
+                box = (
+                    min(r["x0"] for r in verticals),
+                    min(r["top"] for r in verticals),
+                    max(r["x1"] for r in verticals),
+                    max(r["bottom"] for r in verticals),
+                )
+                printed.update(token for word in page.crop(box).extract_words() for token in _tokens(word["text"]))
+    texts = (text for row in rows for text in (row.new, row.old, row.subject, row.summary))
+    held = Counter(token for text in texts for token in _tokens(text))
+    return sum(printed.values()), printed - held, held - printed

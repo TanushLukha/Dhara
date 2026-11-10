@@ -116,12 +116,30 @@ SOURCES: tuple[Source, ...] = (
 
 # The correspondence tables (decisions 5 and 24): CAPT Bhopal's table and comparison summary for each pair
 # of Acts, one author and one layout for all three, as the Kerala Prisons department serves them. Each
-# was opened and its first rows read before it was listed; hashes are pinned once the files are read.
+# was read whole (every new section has a row; see m1_tables.md) before its hash was pinned.
 CAPT = "https://keralaprisons.gov.in/userfiles/act-and-rules"
 TABLES: tuple[Source, ...] = (
-    Source("bns_ipc_table", "bns", f"{CAPT}/comparison_summary_BNS_to_IPC.pdf", "CAPT Bhopal, BNS to IPC"),
-    Source("bnss_crpc_table", "bnss", f"{CAPT}/comparison_summary_BNSS_to_CrPC.pdf", "CAPT Bhopal, BNSS to CrPC"),
-    Source("bsa_iea_table", "bsa", f"{CAPT}/comparison_summary_BSA_to_IEA.pdf", "CAPT Bhopal, BSA to IEA"),
+    Source(
+        "bns_ipc_table",
+        "bns",
+        f"{CAPT}/comparison_summary_BNS_to_IPC.pdf",
+        "CAPT Bhopal, BNS to IPC",
+        sha256="3ad875b6162deb9d6a722244c537b1ffa72ee20e025f08a32d272f2612cf9a25",
+    ),
+    Source(
+        "bnss_crpc_table",
+        "bnss",
+        f"{CAPT}/comparison_summary_BNSS_to_CrPC.pdf",
+        "CAPT Bhopal, BNSS to CrPC",
+        sha256="aa3e49147cf88141a8471a614246270ab4730cd3a4099e06de7a69792d80d33b",
+    ),
+    Source(
+        "bsa_iea_table",
+        "bsa",
+        f"{CAPT}/comparison_summary_BSA_to_IEA.pdf",
+        "CAPT Bhopal, BSA to IEA",
+        sha256="7693f293acb11ae55d8787a27093c2daa23a08e1a1f5673770ac6486b7c58c87",
+    ),
 )
 
 USER_AGENT = "dhara/0.1 (downloads the Acts once, for research)"

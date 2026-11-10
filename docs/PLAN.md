@@ -73,8 +73,8 @@ Together about 2,200 numbered sections, more with the lettered ones; M1 counts t
 tables come with them: the BNSS First Schedule (for each offence: punishment, cognizable or not,
 bailable or not, which court tries it) and the correspondence between old and new sections, compiled
 from the correspondence tables the Central Academy for Police Training, Bhopal (CAPT) has published,
-one for each pair of Acts, each row typed by its change (decision 24). The commencement notifications,
-as India Code's footnotes record them, join the corpus too (decision 25).
+one for each pair of Acts, each row labelled by what changed and by its shape (decision 24). The
+commencement notifications, as India Code's footnotes record them, join the corpus too (decision 25).
 
 ### Questions
 
@@ -236,25 +236,34 @@ exactly what the standard recipe does and what M2 measures against.
 What: the BNSS First Schedule parsed into rows (section, offence, punishment, cognizable, bailable,
 court); the correspondence table compiled from CAPT Bhopal's three tables (BNS to IPC, BNSS to CrPC,
 BSA to IEA: one author and one layout for all three), many to many (one BNS section can replace
-several IPC sections), each row typed by its change (decision 24). Both checked against the Acts on a
-random sample of 50 rows each, drawn with a fixed seed into a sheet under `docs/checks/` that Tanush
-fills and the script counts. The schedule is read from the BNSS file itself: each page's column edges
-come from the rules across the top of its table, every character goes to the column its middle falls
-in (some cells are letter spaced, and a word would otherwise run from one column into the next), and a
-row starts where the offence and at least two other columns begin in capitals at the same height.
-Checks, in `m1_tables.md`: every row names a BNS section, the rows follow the BNS in order, every
-value falls in a class (cognizable or not, bailable or not, which court, or one that depends on
-another offence), and every term of punishment a row states (7 years, life) appears in the words of
-its BNS section; the BNS sections that punish but have no row are listed (India Code's schedule has
-none for section 307).
+several IPC sections), each row labelled by what changed and by its shape (decision 24). Both checked
+against the Acts on a random sample of 50 rows each, drawn with a fixed seed into a sheet under
+`docs/checks/` that Tanush fills and the script counts. The schedule is read from the BNSS file
+itself: each page's column edges come from the rules across the top of its table, every character goes
+to the column its middle falls in (some cells are letter spaced, and a word would otherwise run from
+one column into the next), and a row starts where the offence and at least two other columns begin in
+capitals at the same height. Checks, in `m1_tables.md`: every row names a BNS section, the rows follow
+the BNS in order, every value falls in a class (cognizable or not, bailable or not, which court, or
+one that depends on another offence), and every term of punishment a row states (7 years, life)
+appears in the words of its BNS section; the BNS sections that punish but have no row are listed
+(India Code's schedule has none for section 307). CAPT's tables are ruled on every side, so
+pdfplumber's table finder reads them, with three repairs: a row carried over from the page before has
+no rule above it, so each page's table is closed where its column rules begin; a box drawn inside a
+cell is skipped, its words being the cell's; and a cell the finder could not close is read from the
+words inside its bounds. Their checks: every section of the new Act has a row, every section a row
+names exists, the rows follow the new Act's order, and every word inside a table's rules reaches
+exactly one row (the header aside).
 Why: "is it bailable" and "what replaced IPC 420" are among the commonest questions, and both are
 lookups in a table, not semantic search; the agent gets them as tools (M4). The schedule comes from
 the pinned BNSS file rather than a copy on another site, so its rows are the law's own; CAPT's tables
 come from a government police academy, cover all three pairs in one layout, and describe each change
 in words, which decision 24 reads. The punishment check ties each row to the words of its section, so
 a number put on the wrong row shows. Why not leave the tables to retrieval: a schedule row read as
-text loses its columns; M4 measures what the tools add. Why not pdfplumber's own table finder: the
-table is ruled only across its header, and the finder found no table on its pages. Why not the
+text loses its columns; M4 measures what the tools add. Why not pdfplumber's own table finder for the
+schedule: it is ruled only across its header, and the finder found no table on its pages. The word
+check exists because counting rows was not enough: the first reading of CAPT's tables lost the first
+row of most pages, dropped rows that name their provision in words ("First proviso to section 22") and
+read some cells twice, and the coverage and word checks between them showed each. Why not the
 comparison tables on lawyers' sites: they are unofficial, and nothing pins them.
 
 ## Decisions in M1
@@ -411,19 +420,27 @@ Why: DocLens's first CRNN run died of memory a benchmark would have shown; on a 
 can also slow with heat, so the benchmark runs long enough to show it. Ollama's MLX engine first
 needed more than 32 GB, so which engine runs here must be measured.
 
-**24. Every old to new pair typed by its change.**
-What: each correspondence row gets a type: unchanged (same text, new number), modified (wording, scope
-or punishment changed), merged (several old sections into one), split (one old section into several),
-new (no old counterpart) or omitted (no new counterpart). Where a government table describes the
-change in words, a script reads the type from them: CAPT Bhopal's tables describe each change in a
-free text column and have no column for its type. Elsewhere a script compares the two texts and
-proposes a type. Tanush checks the types on decision 5's sample of 50 rows per table and on every row
-a gold answer uses. Answers about a change quote both sections and name the type.
-Why: "is BNS 318 the same as IPC 420" is answered by the type, and treating a modified section as
-identical is exactly the code confusion the project measures. Reading the type from the government's
-own words keeps the hand work small. Why not leave the type to the model reading both texts: that is
-one of the things M4 measures, not something to assume. Why not unchecked labels: they would leak
-into gold answers.
+**24. Every old to new pair labelled by what changed and by its shape.**
+What: each correspondence row gets two labels. What changed: unchanged (the same text under a new
+number, including an old section kept whole as a subsection or proviso), modified (wording, scope or
+punishment changed), new (no old counterpart), or heading (a row that sums up the rows of its
+subsections). Its shape, over whole sections: one to one, merged (a new section takes in several old
+ones), split (an old section went to several new ones), or merged and split. A script reads what
+changed from CAPT's own words, since its tables describe each change in a free text column and have no
+column for its type: a comparison that says no more than "No change", that the old section became a
+subsection with its heading dropped, or the note made once that "Code" becomes "Sanhita", means
+unchanged; anything else means modified; "New" or a dash in the old column means new. The shape
+follows from the sections the rows name. Old sections that no row names are listed in `m1_tables.md`:
+each was dropped by the new Act (omitted) or went into a new section without CAPT naming it, and a
+script that compares the two texts proposes which, for Tanush to confirm. Tanush checks the labels on
+decision 5's sample of 50 rows and on every row a gold answer uses. Answers about a change quote both
+sections and name both labels.
+Why: "is BNS 318 the same as IPC 420" is answered by both labels: in CAPT's table IPC 420 became BNS
+318(4) unchanged, inside a section that also takes in IPC 415, 417 and 418. Two labels rather than one
+type, because a row can be modified and merged at once (BNS 2(8) takes in IPC 29 and 29A and adds
+words), and one type would drop half of that. Reading CAPT's words keeps the hand work small. Why not
+leave the labels to the model reading both texts: that is one of the things M4 measures, not something
+to assume. Why not unchecked labels: they would leak into gold answers.
 
 **25. Which law applies: savings sections and notifications; a missing fact is asked for.**
 What: "which law applies" questions are answered from the repeal and savings sections (BNS 358, BNSS
@@ -628,7 +645,7 @@ free text with citations against claims with quotes; an instruction to decline. 
 
 The graph: route (explicit references, language, scope; declines early what is out of scope), plan
 (sub questions for questions that need two sections or both codes), act with tools (look up a section,
-search, map old to new with the change type, classify an offence, check which law applies by date),
+search, map old to new with both labels, classify an offence, check which law applies by date),
 grade what retrieval found and correct it (decision 27), answer, verify (code checks every citation
 and quote, then the model checks each claim against its cited section), revise once or decline.
 Ablations remove each node and each tool and compare the two graders; budgets cap calls and tokens.
@@ -740,7 +757,7 @@ Python 3.13, a virtual environment and `pip install -e ".[extras]"` as in DocLen
 2. Free tiers only: nothing is paid (decision 14).
 3. 550 hand checked questions: validation 150, test 300, reserve 100 (decision 6).
 4. The six criminal law Acts (decision 1).
-5. After review: the change types, which law applies with asking, the answer's shape and corrective
+5. After review: the change labels, which law applies with asking, the answer's shape and corrective
    retrieval (decisions 24 to 27).
 
 ## Before M1's baselines run

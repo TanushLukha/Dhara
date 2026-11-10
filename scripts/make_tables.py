@@ -1,16 +1,18 @@
-"""Reads the BNSS First Schedule into rows and writes the check of decision 5 to docs/results.
+"""Reads the two tables of decision 5 and writes their checks to docs/results.
 
     python scripts/make_tables.py
 
-Needs data/raw/bnss.pdf (scripts/get_data.py) and data/parsed/bns.jsonl (scripts/parse_corpus.py).
-Rows go to data/tables/first_schedule.jsonl (not committed). The results file, docs/results/m1_tables.md,
-counts the rows, checks every row's section against the BNS and the order of the sections, checks each
-stated term of punishment against the words of its section, and lists what stands out.
+The BNSS First Schedule comes from data/raw/bnss.pdf; the old to new correspondence from CAPT Bhopal's
+three tables in data/raw (scripts/get_data.py); the Acts' sections from data/parsed
+(scripts/parse_corpus.py). Rows go to data/tables/first_schedule.jsonl and data/tables/correspondence.jsonl
+(not committed). The results file, docs/results/m1_tables.md, counts the rows, checks every section a row
+names against the Acts, checks the schedule's terms of punishment against the words of their sections,
+checks that every word inside a correspondence table reached a row, and lists what stands out.
 
-The hand check sheet, docs/checks/first_schedule.csv, holds 50 rows of Part I drawn with a fixed seed.
-It is written only when it does not exist, so the verdicts filled into it are never overwritten: its
-verdict column takes "ok", or a note of what is wrong. A row that no longer matches the parser's output
-is reported as changed since it was checked.
+Two hand check sheets in docs/checks hold 50 rows each, drawn with a fixed seed: first_schedule.csv and
+correspondence.csv. Each is written only when it does not exist, so the verdicts filled into it are never
+overwritten: its verdict column takes "ok", or a note of what is wrong. A row that no longer matches the
+reader's output is reported as changed since it was checked.
 """
 
 import csv
@@ -20,65 +22,117 @@ import random
 import re
 import sys
 from collections import Counter
-from dataclasses import asdict
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import pdfplumber
 
 from dhara import DATA, REPO
-from dhara.tables import ScheduleRow, base_section, court_kind, first_schedule, kind, terms
+from dhara.corpus import ACT, ACTS, TABLES
+from dhara.tables import (
+    CHANGES,
+    Correspondence,
+    ScheduleRow,
+    base_section,
+    correspondence,
+    court_kind,
+    first_schedule,
+    kind,
+    terms,
+    words_kept,
+)
 
 RESULTS = REPO / "docs" / "results" / "m1_tables.md"
-SHEET = REPO / "docs" / "checks" / "first_schedule.csv"
 SEED = 5
 SAMPLE = 50
-FIELDS = ["section", "offence", "punishment", "cognizable", "bailable", "court"]
+SHAPES = ("one to one", "merged", "split", "merged and split")
 
 
-def load_bns(path: Path) -> dict[str, str]:
-    """Each BNS section's heading and text, in lower case, keyed by its number."""
-    sections = {}
-    for line in path.read_text(encoding="utf8").splitlines():
-        section = json.loads(line)
-        text = " ".join([section["heading"], *section["paragraphs"]]).lower()
-        sections[section["number"]] = re.sub(r"\s+", " ", text)
-    return sections
+@dataclass(frozen=True)
+class Sheet:
+    path: Path
+    fields: tuple[str, ...]  # the columns a row is checked on, between its page and the verdict
+    label: Callable[[dict[str, str]], str]  # how a row is named in the results
 
 
-def write_sheet(rows: list[ScheduleRow]) -> None:
-    part_one = [row for row in rows if row.part == "I"]
-    drawn = sorted(random.Random(SEED).sample(range(len(part_one)), SAMPLE))
-    SHEET.parent.mkdir(parents=True, exist_ok=True)
-    with SHEET.open("w", encoding="utf8", newline="") as out:
+SCHEDULE_SHEET = Sheet(
+    REPO / "docs" / "checks" / "first_schedule.csv",
+    ("section", "offence", "punishment", "cognizable", "bailable", "court"),
+    lambda row: f"section {row['section']}",
+)
+CORRESPONDENCE_SHEET = Sheet(
+    REPO / "docs" / "checks" / "correspondence.csv",
+    ("table", "new", "old", "old_sections", "subject", "summary", "change", "shape"),
+    lambda row: f"{row['table'].removesuffix('_table')} {row['new']}",
+)
+
+
+def flat(row: Any) -> dict[str, str]:
+    """A row as the strings a sheet holds."""
+    return {
+        name: " ".join(value) if isinstance(value, tuple) else "" if value is None else str(value)
+        for name, value in asdict(row).items()
+    }
+
+
+def write_sheet(sheet: Sheet, rows: Sequence[dict[str, str]]) -> None:
+    drawn = sorted(random.Random(SEED).sample(range(len(rows)), SAMPLE))
+    sheet.path.parent.mkdir(parents=True, exist_ok=True)
+    with sheet.path.open("w", encoding="utf8", newline="") as out:
         writer = csv.writer(out)
-        writer.writerow(["n", "page", *FIELDS, "verdict"])
+        writer.writerow(["n", "page", *sheet.fields, "verdict"])
         for n, index in enumerate(drawn, start=1):
-            row = part_one[index]
-            writer.writerow([n, row.page, *(getattr(row, name) or "" for name in FIELDS), ""])
+            writer.writerow([n, rows[index]["page"], *(rows[index][name] for name in sheet.fields), ""])
 
 
-def read_sheet(rows: list[ScheduleRow]) -> tuple[int, int, list[str], list[str]]:
+def read_sheet(sheet: Sheet, rows: Sequence[dict[str, str]]) -> tuple[int, int, list[str], list[str]]:
     """How many rows were checked and found right, the notes on those found wrong, and the rows changed
     since they were checked."""
-    current = {tuple(getattr(row, name) or "" for name in FIELDS) for row in rows}
+    current = {tuple(row[name] for name in sheet.fields) for row in rows}
     checked = right = 0
     wrong, changed = [], []
-    with SHEET.open(encoding="utf8", newline="") as sheet:
-        for entry in csv.DictReader(sheet):
+    with sheet.path.open(encoding="utf8", newline="") as found:
+        for entry in csv.DictReader(found):
             verdict = (entry.get("verdict") or "").strip()
             if not verdict:
                 continue
             checked += 1
-            if tuple(entry[name] for name in FIELDS) not in current:
-                changed.append(f"row {entry['n']} (section {entry['section']})")
+            if tuple(entry[name] for name in sheet.fields) not in current:
+                changed.append(f"row {entry['n']} ({sheet.label(entry)})")
             if verdict.lower() == "ok":
                 right += 1
             else:
-                wrong.append(f"row {entry['n']} (section {entry['section']}, page {entry['page']}): {verdict}")
+                wrong.append(f"row {entry['n']} ({sheet.label(entry)}, page {entry['page']}): {verdict}")
     return checked, right, wrong, changed
 
 
-def report(rows: list[ScheduleRow], bns: dict[str, str]) -> str:
+def hand_check(sheet: Sheet, rows: Sequence[dict[str, str]], against: str) -> list[str]:
+    if not sheet.path.exists():
+        return ["No sheet yet."]
+    checked, right, wrong, changed = read_sheet(sheet, rows)
+    where = f"`{sheet.path.relative_to(REPO)}`"
+    if not checked:
+        return [f"{SAMPLE} rows drawn with seed {SEED} into {where}; none checked yet."]
+    lines = [f"{checked} of {SAMPLE} rows in {where} checked by hand against {against}: {right} right."]
+    if wrong:
+        lines += ["", *(f"* {note}" for note in wrong)]
+    if changed:
+        lines += ["", f"Changed since they were checked: {', '.join(changed)}."]
+    return lines
+
+
+def load_sections(act: str) -> dict[str, dict[str, Any]]:
+    path = DATA / "parsed" / f"{act}.jsonl"
+    return {section["number"]: section for section in map(json.loads, path.read_text(encoding="utf8").splitlines())}
+
+
+def lowered(section: dict[str, Any]) -> str:
+    return re.sub(r"\s+", " ", " ".join([section["heading"], *section["paragraphs"]]).lower())
+
+
+def schedule_report(rows: list[ScheduleRow], bns: dict[str, str]) -> list[str]:
     part_one = [row for row in rows if row.part == "I"]
     part_two = [row for row in rows if row.part == "II"]
     sections = {base_section(row.section or "") for row in part_one}
@@ -95,11 +149,11 @@ def report(rows: list[ScheduleRow], bns: dict[str, str]) -> str:
     missed = []
     for row in part_one:
         wanted = terms(row.punishment or "")
-        if not wanted or base_section(row.section or "") not in bns:
+        section = base_section(row.section or "")
+        if not wanted or section not in bns:
             continue
         stated += 1
-        text = bns[base_section(row.section or "") or ""]
-        absent = [term for term in wanted if term not in text]
+        absent = [term for term in wanted if term not in bns[section]]
         if absent:
             missed.append(f"* section {row.section}: \"{row.punishment}\"; not in the section: {', '.join(absent)}")
         else:
@@ -121,13 +175,7 @@ def report(rows: list[ScheduleRow], bns: dict[str, str]) -> str:
         )
         if label in ("other", "conditional")
     ]
-    lines = [
-        "# M1: the tables",
-        "",
-        "Made by `python scripts/make_tables.py` from `data/raw/bnss.pdf` and the parsed BNS (decision 5).",
-        f"Machine: {platform.system()} {platform.release()} {platform.machine()}; Python "
-        f"{platform.python_version()}; pdfplumber {pdfplumber.__version__}.",
-        "",
+    return [
         "## The BNSS First Schedule",
         "",
         "| Part | Rows | BNS sections | Rows opened by a lead in | Rows naming no BNS section | Rows out of order |",
@@ -153,7 +201,7 @@ def report(rows: list[ScheduleRow], bns: dict[str, str]) -> str:
         "abetted is triable\"). Conditional: the value states a condition (\"only on the complaint of the "
         "victim\"). Other: the value could not be classed.",
         "",
-        "## Punishment against the BNS",
+        "### Punishment against the BNS",
         "",
         f"{stated} rows of Part I state a term of punishment (years, months, life or death); for {found}, every "
         "term appears in the words of the row's BNS section (7 years as \"seven years\"). The rest state none "
@@ -164,43 +212,125 @@ def report(rows: list[ScheduleRow], bns: dict[str, str]) -> str:
         "BNS sections whose words punish (\"shall be punished\", \"be punishable\") but which no row of Part I "
         f"names: {', '.join(unlisted) if unlisted else 'none'}.",
         "",
-        "## What stands out",
+        "### What stands out",
         "",
         *(unusual or ["Nothing."]),
         "",
-        "## Hand check (decision 5)",
+        "### Hand check (decision 5)",
+        "",
+        *hand_check(SCHEDULE_SHEET, [flat(row) for row in part_one], "the schedule in the BNSS file"),
         "",
     ]
-    if SHEET.exists():
-        checked, right, wrong, changed = read_sheet(rows)
-        if checked:
-            lines.append(f"{checked} of {SAMPLE} rows checked by hand against the schedule and the BNS: {right} right.")
-            if wrong:
-                lines += ["", *(f"* {note}" for note in wrong)]
-            if changed:
-                lines += ["", f"Changed since they were checked: {', '.join(changed)}."]
-        else:
-            lines.append(f"{SAMPLE} rows drawn with seed {SEED} into `{SHEET.relative_to(REPO)}`; none checked yet.")
-    lines.append("")
-    return "\n".join(lines)
+
+
+def correspondence_report(tables: dict[str, list[Correspondence]]) -> list[str]:
+    counts, labels, unnamed, header = [], [], [], []
+    sources = {source.key: source for source in TABLES}
+    for key, rows in tables.items():
+        new_act = ACT[sources[key].act]
+        old_act = next(act for act in ACTS if act.replaced_by == new_act.key)
+        new, old = load_sections(new_act.key), load_sections(old_act.key)
+        without = [number for number in new if number not in {row.new_section for row in rows}]
+        foreign = [row for row in rows if row.new_section not in new or any(s not in old for s in row.old_sections)]
+        out_of_order, previous = [], 0
+        for row in rows:
+            digits = re.match(r"\d+", row.new_section)
+            number = int(digits[0]) if digits else 0
+            if number < previous:
+                out_of_order.append(row)
+            previous = number
+        total, missing, repeated = words_kept(DATA / "raw" / f"{key}.pdf", rows)
+        counts.append(
+            f"| {new_act.short} to {old_act.short} | {len(rows)} | {len(without)} | {len(foreign)} "
+            f"| {len(out_of_order)} | {total} | {sum(missing.values())} | {sum(repeated.values())} |"
+        )
+        header.append(f"{new_act.short} to {old_act.short}: " + ", ".join(sorted(missing.elements())))
+        change, shape = Counter(row.change for row in rows), Counter(row.shape for row in rows)
+        labels.append(
+            f"| {new_act.short} to {old_act.short} | "
+            + " | ".join(str(change[name]) for name in CHANGES)
+            + " | "
+            + " | ".join(str(shape[name]) for name in SHAPES)
+            + " |"
+        )
+        named = {section for row in rows for section in row.old_sections}
+        left = [n for n, section in old.items() if n not in named and section["status"] == "in force"]
+        unnamed.append(f"* {old_act.short}: {', '.join(left) if left else 'none'}")
+    everything = [row for rows in tables.values() for row in rows]
+    return [
+        "## The old to new correspondence",
+        "",
+        "| Table | Rows | New sections without a row | Rows naming a section the Acts lack | Rows out of order "
+        "| Words inside its rules | Words no row holds | Words held twice |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        *counts,
+        "",
+        "CAPT Bhopal's three tables, one row for each provision of the new Act that CAPT compares. A row out "
+        "of order names a section before the one above it. The words inside a table's rules are counted on the "
+        "page and in the rows read from it: a word no row holds was lost, unless it is the table's header, "
+        "which is not a row; a word held twice was read twice. The words no row holds: " + "; ".join(header) + ".",
+        "",
+        "| Table | Unchanged | Modified | New | Heading | One to one | Merged | Split | Merged and split |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        *labels,
+        "",
+        "What changed comes from CAPT's own words. Unchanged: the comparison says no more than \"No change\", "
+        "that the old section is now a subsection of the new one with its heading dropped, or the note made "
+        "once that \"Code\" becomes \"Sanhita\" throughout. New: the old column says New, or a dash. Heading: "
+        "the old column is empty and rows for the section's subsections follow. Modified: anything else. "
+        "The shape comes from the sections the rows name, taken whole: merged when a new section takes in "
+        "several old ones, split when an old section went to several new ones.",
+        "",
+        "Old sections in force that no row names; each was dropped by the new Act, or went into a new section "
+        "without CAPT naming it, and the text comparison of decision 24 tells which:",
+        "",
+        *unnamed,
+        "",
+        "### Hand check (decisions 5 and 24)",
+        "",
+        *hand_check(CORRESPONDENCE_SHEET, [flat(row) for row in everything], "CAPT's tables and their labels"),
+        "",
+    ]
 
 
 def main() -> int:
-    pdf, parsed = DATA / "raw" / "bnss.pdf", DATA / "parsed" / "bns.jsonl"
-    for needed, script in ((pdf, "get_data.py"), (parsed, "parse_corpus.py")):
-        if not needed.exists():
-            print(f"missing {needed.relative_to(REPO)}; run scripts/{script} first", file=sys.stderr)
+    needed = [DATA / "raw" / f"{key}.pdf" for key in ("bnss", *(source.key for source in TABLES))]
+    needed += [DATA / "parsed" / f"{act.key}.jsonl" for act in ACTS]
+    for path in needed:
+        if not path.exists():
+            script = "get_data.py" if path.parent.name == "raw" else "parse_corpus.py"
+            print(f"missing {path.relative_to(REPO)}; run scripts/{script} first", file=sys.stderr)
             return 1
-    rows = first_schedule(pdf)
-    out = DATA / "tables" / "first_schedule.jsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("".join(json.dumps(asdict(row), ensure_ascii=False) + "\n" for row in rows), encoding="utf8")
-    if not SHEET.exists():
-        write_sheet(rows)
-        print(f"wrote {SHEET.relative_to(REPO)}, {SAMPLE} rows to check by hand")
+    schedule = first_schedule(DATA / "raw" / "bnss.pdf")
+    tables = {source.key: correspondence(DATA / "raw" / f"{source.key}.pdf", source.key) for source in TABLES}
+    out = DATA / "tables"
+    out.mkdir(parents=True, exist_ok=True)
+    for name, rows in (("first_schedule", schedule), ("correspondence", [r for v in tables.values() for r in v])):
+        (out / f"{name}.jsonl").write_text(
+            "".join(json.dumps(asdict(row), ensure_ascii=False) + "\n" for row in rows), encoding="utf8"
+        )
+    part_one = [flat(row) for row in schedule if row.part == "I"]
+    pairs = [flat(row) for table in tables.values() for row in table]
+    for sheet, drawn_from in ((SCHEDULE_SHEET, part_one), (CORRESPONDENCE_SHEET, pairs)):
+        if not sheet.path.exists():
+            write_sheet(sheet, drawn_from)
+            print(f"wrote {sheet.path.relative_to(REPO)}, {SAMPLE} rows to check by hand")
+    bns = {number: lowered(section) for number, section in load_sections("bns").items()}
+    lines = [
+        "# M1: the tables",
+        "",
+        "Made by `python scripts/make_tables.py` from `data/raw` and the parsed Acts (decisions 5 and 24).",
+        f"Machine: {platform.system()} {platform.release()} {platform.machine()}; Python "
+        f"{platform.python_version()}; pdfplumber {pdfplumber.__version__}.",
+        "",
+        *schedule_report(schedule, bns),
+        *correspondence_report(tables),
+    ]
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS.write_text(report(rows, load_bns(parsed)), encoding="utf8")
-    print(f"{len(rows)} rows; wrote {out.relative_to(REPO)} and {RESULTS.relative_to(REPO)}")
+    RESULTS.write_text("\n".join(lines), encoding="utf8")
+    rows_read = sum(len(rows) for rows in tables.values())
+    print(f"{len(schedule)} schedule rows, {rows_read} correspondence rows; wrote data/tables and "
+          f"{RESULTS.relative_to(REPO)}")
     return 0
 
 

@@ -1,4 +1,17 @@
-from dhara.tables import ScheduleRow, TableLine, assemble, base_section, court_kind, kind, terms
+from dhara.tables import (
+    Correspondence,
+    ScheduleRow,
+    TableLine,
+    _section_in,
+    _shaped,
+    assemble,
+    base_section,
+    change_of,
+    court_kind,
+    kind,
+    old_sections,
+    terms,
+)
 
 
 def row(top: float, *cells: str, page: int = 1) -> TableLine:
@@ -81,3 +94,58 @@ def test_references_and_terms_are_read() -> None:
     assert terms("Simple imprisonment for 1 month, or fine of 5,000 rupees.") == ["one month"]
     assert terms("Death, or imprisonment for life.") == ["life", "death"]
     assert terms("Same as for offence abetted.") == []
+
+
+def test_old_references_name_their_sections() -> None:
+    assert old_sections("29 and 29A") == ("29", "29A")
+    assert old_sections("54 & 55") == ("54", "55")
+    assert old_sections("376(1) & 376(2)") == ("376",)
+    assert old_sections("228A (1)/(2)") == ("228A",)
+    ranges = ("230", "231", "232", "246", "247", "248", "249", "255", "489A")
+    assert old_sections("230 to 232, 246 to 249, 255, 489A") == ranges
+    assert old_sections("354A to 354D") == ("354A", "354B", "354C", "354D")
+    assert old_sections("233 / 234 / 235") == ("233", "234", "235")
+    assert old_sections("171-I") == ("171I",)
+    assert old_sections("498A Explanat ion") == ("498A",)
+    assert old_sections("23 Clause-1") == ("23",)
+    assert old_sections("2(a)]") == ("2",) and old_sections("2 (wa)") == ("2",)
+    assert old_sections("3, para 1") == ("3",) and old_sections("IEA 3 Interpret ation clause") == ("3",)
+    assert old_sections("New") == () and old_sections("-") == () and old_sections("New sub- section") == ()
+
+
+def test_the_change_is_read_from_the_comparison() -> None:
+    assert change_of(("33",), "33", "No change.") == "unchanged"
+    assert change_of(("6",), "6", "Section is included as sub-section in BNS sans heading.") == "unchanged"
+    moved = "Section is included as a sub-section in BNS sans heading. No other Changes."
+    assert change_of(("150",), "150", moved) == "unchanged"
+    assert change_of(("143",), "143", "Section 143 IEA is included as subsection (4) of 146 BSA.") == "unchanged"
+    once = (
+        'No change except "Code" is replaced with "Sanhita". Wherever the word “Code” is used in CrPC, the word '
+        "“Sanhita” is used in BNSS, therefore, this fact will not be specifically mentioned in this table hereinafter."
+    )
+    assert change_of(("2",), "2(d)", once) == "unchanged"
+    assert change_of(("115",), "115", '"pleader" is replaced by "advocate".') == "modified"
+    assert change_of(("9",), "9", 'No change except the words "Notwithstanding anything" are excluded.') == "modified"
+    assert change_of((), "New", "Newly added.") == "new"
+    assert change_of((), "", "In the IPC, definitions are not consolidated in a single section.") == "heading"
+
+
+def test_shapes_follow_whole_sections() -> None:
+    def pair(new: str, old: tuple[str, ...]) -> Correspondence:
+        return Correspondence("t", new, _section_in(new) or "", " & ".join(old), old, "", "", "", "modified", "", 1)
+
+    rows = _shaped(
+        [
+            pair("2(8)", ("29", "29A")),
+            pair("64", ("376",)),
+            pair("65(1)", ("376",)),
+            pair("65(2)", ("376AB",)),
+            pair("318(4)", ("420",)),
+            pair("First proviso to section 22", ("28",)),
+            pair("113", ()),
+        ]
+    )
+    assert [row.shape for row in rows] == [
+        "merged", "split", "merged and split", "merged", "one to one", "one to one", ""
+    ]
+    assert rows[5].new_section == "22"
