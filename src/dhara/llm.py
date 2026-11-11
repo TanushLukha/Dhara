@@ -150,6 +150,7 @@ class Reply:
     key: str  # the cache key
     cached: bool
     body: Json  # the provider's whole answer, for what the fields above leave out (Ollama's timings)
+    limits: dict[str, str]  # the rate limit counts the provider sent with this answer, when it sends any
 
 
 class LlmError(Exception):
@@ -477,15 +478,26 @@ class Client:
         identity = canonical({"provider": provider.name, "model": model.id, "version": version})
         key = hashlib.sha256(f"{identity}\n{request}".encode()).hexdigest()
         row = self.db.execute(
-            "SELECT text, version, tokens_in, tokens_out, tokens_thinking, seconds, finish, body FROM calls"
+            "SELECT text, version, tokens_in, tokens_out, tokens_thinking, seconds, finish, body, limits FROM calls"
             " WHERE key = ?",
             (key,),
         ).fetchone()
         if row is not None:
-            text, answered, tokens_in, tokens_out, thinking, seconds, finish, body = row
+            text, answered, tokens_in, tokens_out, thinking, seconds, finish, body, limits = row
             cost = price(model, tokens_in, tokens_out)
             return Reply(
-                text, answered, tokens_in, tokens_out, thinking, seconds, cost, finish, key, True, json.loads(body)
+                text,
+                answered,
+                tokens_in,
+                tokens_out,
+                thinking,
+                seconds,
+                cost,
+                finish,
+                key,
+                True,
+                json.loads(body),
+                json.loads(limits),
             )
         if self.replay:
             raise NotCached(f"replay mode, and the cache holds no call to {name} with these messages and settings")
@@ -636,6 +648,7 @@ class Client:
             key,
             False,
             data,
+            limits,
         )
 
     def _json(self, raw: bytes, provider: Provider) -> Json:

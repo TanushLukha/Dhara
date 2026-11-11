@@ -130,6 +130,8 @@ def test_chat_completions_request_and_reply(tmp_path: Path) -> None:
     assert (reply.tokens_in, reply.tokens_out, reply.tokens_thinking) == (100, 20, 5)
     assert reply.seconds == 1.5
     assert reply.cost == pytest.approx((100 * 0.15 + 20 * 0.60) / 1e6)
+    # the provider's own count of what is left is kept; other headers are not
+    assert reply.limits == {"x-ratelimit-remaining-requests": "999"}
 
 
 def test_groq_caps_the_reply_with_its_own_field(tmp_path: Path) -> None:
@@ -240,7 +242,7 @@ def test_a_repeated_call_comes_from_the_cache(tmp_path: Path) -> None:
         other = llm.ask("mistral-small-4", QUESTION, Settings(temperature=0.7))
     assert len(http.sent) == 2
     assert (again.text, again.cached, again.key, again.tokens_in) == ("first", True, first.key, first.tokens_in)
-    assert again.cost == first.cost and again.body == first.body
+    assert again.cost == first.cost and again.body == first.body and again.limits == first.limits
     assert (other.text, other.cached) == ("second", False)
 
 

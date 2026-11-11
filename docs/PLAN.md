@@ -412,7 +412,9 @@ cache then. A 429 or a server error is retried five times, waiting as long as th
 4, 8, 16 and 32 seconds; a refused request is not retried. A replay mode answers from the cache only
 and fails on any call it has not seen. API keys come from the environment or a `.env` file that git
 ignores. Each results file names the machine, the models with versions, the prompt hashes and the
-corpus manifest.
+corpus manifest. Before any long run, `scripts/check_models.py` asks every API model one question, as
+text and as JSON that follows a schema, and records in `m1_accounts.md` whether each call worked, what
+answered and the limits each provider reports.
 Why: reruns cost nothing and give the same numbers; tokens per question are measured, not estimated;
 free tiers answer 429 when a limit is crossed, and pacing turns that into a slower run instead of a
 broken one; an API model can change or be retired, and the cache keeps the evidence. A rolling window
@@ -651,8 +653,8 @@ In this order: the repository and CI (decision 28); the corpus, the notification
 checks (decisions 3 to 5, 24, 25, 29, 30); the validation questions, then the test
 and reserve sets, sealed (decisions 6 to 8); the free accounts with their recorded limits, the model
 client and the local benchmark (14 to 17); both baselines on validation (12, 13); Tanush's labels and
-the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_tables.md`, `m1_questions.md`,
-`m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
+the judge's validation (10); the scores. Results: `m1_corpus.md`, `m1_tables.md`, `m1_accounts.md`,
+`m1_questions.md`, `m1_bench_llm.md`, `m1_judge.md`, `m1_baselines.md`.
 
 ### M2 Retrieval
 
@@ -753,8 +755,8 @@ src/dhara/
   service.py      FastAPI: /v1/ask, /v1/sections, /v1/map, /health, the demo page
   demo.html
 eval/             questions (validation, test and reserve), labels, their SHA256
-scripts/          get_data, parse_corpus, make_tables, draft_questions, check_questions, bench_llm,
-                  eval_memory, eval_recipe, eval_retrieval, eval_answers, eval_agent,
+scripts/          get_data, parse_corpus, make_tables, check_models, draft_questions, check_questions,
+                  bench_llm, eval_memory, eval_recipe, eval_retrieval, eval_answers, eval_agent,
                   label_answers, validate_judge, compare, bench_service, ci_step.sh, ci_annotate.py
 tests/            unit tests, and end to end tests with the fake model
 docs/             PLAN.md, results/, and checks/ (the sheets Tanush fills by hand)
